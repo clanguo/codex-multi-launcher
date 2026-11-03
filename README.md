@@ -67,6 +67,12 @@ Supports the official OpenAI API and third-party endpoints that implement the Re
 
 Creates a ready-to-use profile after the user completes browser-based registration, purchase, and device authorization. No Base URL or API key needs to be entered manually. See the [step-by-step guide](https://jqymodi.github.io/codex-multi-launcher/subscription.html).
 
+## Profile .env File
+
+The creation wizard includes a `.env` step. By default, it copies the entire `~/.codex/.env` into the new profile's Codex directory, independently of the config inheritance option. You can edit the copy before generating the profile or turn copying off. If the source file is missing, you can enter contents to create a new `.env`.
+
+Unedited copies retain all variables, comments, blank lines, and line endings. The source file stays unchanged, and profile updates do not recopy it. Contents are stored only in the new `.env`, not in the profile registry.
+
 ## Conversation History Sync
 
 When creating a profile, you can choose:

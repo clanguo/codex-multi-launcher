@@ -16,6 +16,7 @@ const api = {
   },
   openExternalUrl: (url) => ipcRenderer.invoke("shell:open-external", url),
   getEnvironmentReport: () => ipcRenderer.invoke("environment:get"),
+  getDefaultProfileEnvFile: () => ipcRenderer.invoke("profiles:default-env"),
   getDiagnosticsReport: () => ipcRenderer.invoke("diagnostics:get"),
   pickCodexAppPath: () => ipcRenderer.invoke("dialog:pick-codex-app-path"),
   pickLauncherDirectory: () => ipcRenderer.invoke("dialog:pick-launcher-directory"),

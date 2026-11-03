@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getEnvironmentReport } from "./environment.js";
 import { getDiagnosticsReport } from "./diagnostics.js";
+import { getDefaultProfileEnvFile } from "./profile-env.js";
 import { buildApplicationMenuTemplate, type ApplicationMenuLabels } from "./application-menu.js";
 import { APP_NAME, configurePathProvider } from "./paths.js";
 import {
@@ -284,6 +285,7 @@ function registerIpc(): void {
     return { ok: true };
   });
   ipcMain.handle("environment:get", () => getEnvironmentReport());
+  ipcMain.handle("profiles:default-env", () => getDefaultProfileEnvFile());
   ipcMain.handle("diagnostics:get", () => getDiagnosticsReport());
   ipcMain.handle("dialog:pick-codex-app-path", async () => {
     const result = await dialog.showOpenDialog({

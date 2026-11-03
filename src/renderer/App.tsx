@@ -48,12 +48,12 @@ import type {
 } from "../shared/types";
 import { RU_TEXT } from "./locales/ru";
 
-type WizardStep = "profile" | "provider" | "test" | "launcher" | "generate";
+type WizardStep = "profile" | "provider" | "env" | "test" | "launcher" | "generate";
 type Language = "zh" | "en" | "ru";
 type ActiveView = "dashboard" | "profile" | "settings";
 type SettingsTab = "general" | "about";
 
-const WIZARD_STEPS: WizardStep[] = ["profile", "provider", "test", "launcher", "generate"];
+const WIZARD_STEPS: WizardStep[] = ["profile", "provider", "env", "test", "launcher", "generate"];
 const DEFAULT_PROFILE_COLOR = "#34C759";
 const PROFILE_COLOR_OPTIONS = ["#34C759", "#007AFF", "#5856D6", "#AF52DE", "#FF2D55", "#FF9500", "#FFCC00", "#30B0C7"];
 const APP_LOGO_URL = new URL("../../assets/logo-light-1.png", import.meta.url).href;
@@ -131,6 +131,18 @@ const TEXT: Record<Language, Record<string, string>> = {
     optionalUnavailable: "未安装，不影响桌面配置正常启动。",
     profile: "配置",
     provider: "模型服务",
+    env: ".env 文件",
+    copyEnvFile: "复制 .env 文件",
+    copyEnvFileDesc: "默认完整复制当前 Codex 目录下的 .env，也可以在下方修改新配置的副本。",
+    envFileContent: "新配置的 .env 内容",
+    envFileNote: "生成时保存到新 profile 的 Codex 目录，原文件不会改变。",
+    envFileMissing: "当前 Codex 目录下没有 .env。可以填写内容，为新配置创建一个。",
+    envFileLoading: "正在读取 .env…",
+    envFileRetry: "重新读取",
+    envFileReview: ".env 文件",
+    envFileSaved: "保存编辑区中的全部内容",
+    envFileSkipped: "不复制",
+    envFileNone: "源文件不存在，未填写内容",
     test: "测试",
     launcher: "启动器",
     generate: "生成",
@@ -350,6 +362,18 @@ const TEXT: Record<Language, Record<string, string>> = {
     optionalUnavailable: "Not installed. Desktop profiles can still launch normally.",
     profile: "Profile",
     provider: "Provider",
+    env: ".env file",
+    copyEnvFile: "Copy .env file",
+    copyEnvFileDesc: "Copy the entire .env from your current Codex directory by default. Edit the new profile's copy below.",
+    envFileContent: "New profile .env contents",
+    envFileNote: "Saved in the new profile's Codex directory when generated. The source file stays unchanged.",
+    envFileMissing: "No .env exists in your current Codex directory. Enter contents to create one for this profile.",
+    envFileLoading: "Reading .env…",
+    envFileRetry: "Read again",
+    envFileReview: ".env file",
+    envFileSaved: "Save all contents from the editor",
+    envFileSkipped: "Do not copy",
+    envFileNone: "No source file or entered contents",
     test: "Test",
     launcher: "Launcher",
     generate: "Generate",
@@ -510,6 +534,12 @@ const DEFAULT_FORM = {
   model: "gpt-5.2",
   apiKey: "",
   inheritDefaultConfig: true,
+  copyEnvFile: true,
+  envFileContent: undefined as string | undefined,
+  envFileSourcePath: "",
+  envFileSourceExists: false,
+  envFileStatus: "loading" as "loading" | "ready" | "error",
+  envFileError: "",
   syncHistory: false,
   syncHistorySources: ["default"] as string[],
   syncHistoryScope: "projects" as "projects" | "tasks" | "all",
@@ -628,6 +658,32 @@ export function App() {
   useEffect(() => {
     void refresh();
   }, [showDeletedProfiles]);
+
+  useEffect(() => {
+    if (!isCreateProfileOpen || form.envFileStatus !== "loading") return;
+    let active = true;
+    void window.codexProfileManager.getDefaultProfileEnvFile()
+      .then((source) => {
+        if (!active) return;
+        setForm((current) => ({
+          ...current,
+          envFileContent: source.content ?? undefined,
+          envFileSourcePath: source.path,
+          envFileSourceExists: source.content !== null,
+          envFileStatus: "ready",
+          envFileError: ""
+        }));
+      })
+      .catch((error) => {
+        if (!active) return;
+        setForm((current) => ({
+          ...current,
+          envFileStatus: "error",
+          envFileError: error instanceof Error ? error.message : "Could not read .env."
+        }));
+      });
+    return () => { active = false; };
+  }, [isCreateProfileOpen, form.envFileStatus]);
 
   useEffect(() => {
     void window.codexProfileManager.getAppInfo().then(setAppInfo);
@@ -771,6 +827,7 @@ export function App() {
         subscriptionAuthorizationSessionId: form.authMode === "subscription" ? subscriptionAuthorization?.id : undefined,
         codexAppPath: form.codexAppPath || undefined,
         inheritDefaultConfig: form.inheritDefaultConfig,
+        envFile: { copy: form.copyEnvFile, content: form.envFileContent },
         syncHistory: {
           enabled: form.syncHistory,
           scope: form.syncHistoryScope,
@@ -2274,6 +2331,45 @@ function WizardBody({
     );
   }
 
+  if (wizardStep === "env") {
+    return (
+      <div className="form">
+        <label className="toggle-card">
+          <input checked={form.copyEnvFile} onChange={(event) => onChange({ ...form, copyEnvFile: event.target.checked })} type="checkbox" />
+          <span className="toggle-copy">
+            <strong>{t.copyEnvFile}</strong>
+            <small>{t.copyEnvFileDesc}</small>
+          </span>
+          <span className="switch-track" aria-hidden="true"><span /></span>
+        </label>
+        {form.envFileSourcePath ? <p className="field-note env-source-path">{form.envFileSourcePath}</p> : null}
+        {form.envFileStatus === "loading" ? <p className="field-note" role="status">{t.envFileLoading}</p> : null}
+        {form.envFileStatus === "error" ? (
+          <div role="alert">
+            <p className="danger">{form.envFileError}</p>
+            <button className="button secondary" onClick={() => onChange({ ...form, envFileStatus: "loading", envFileError: "" })} type="button">{t.envFileRetry}</button>
+          </div>
+        ) : null}
+        {form.envFileStatus === "ready" && !form.envFileSourceExists ? <p className="field-note">{t.envFileMissing}</p> : null}
+        <label>
+          {t.envFileContent}
+          <textarea
+            autoCapitalize="off"
+            autoComplete="off"
+            className="env-file-editor"
+            disabled={!form.copyEnvFile || form.envFileStatus !== "ready"}
+            onChange={(event) => onChange({ ...form, envFileContent: event.target.value })}
+            placeholder="KEY=value"
+            rows={12}
+            spellCheck={false}
+            value={form.envFileContent ?? ""}
+          />
+        </label>
+        <p className="field-note">{t.envFileNote}</p>
+      </div>
+    );
+  }
+
   if (wizardStep === "provider") {
     const isAccountMode = form.authMode === "chatgpt_account";
     const isSubscriptionMode = form.authMode === "subscription";
@@ -2429,6 +2525,7 @@ function WizardBody({
       <PathRow label={t.codexAppPath} value={form.codexAppPath || t.codexAppPlaceholder} />
       <PathRow label={t.launcherDirectory} value={form.launcherDirectory || "~/Applications/Codex Profiles/"} />
       <PathRow label={t.inheritConfigReview} value={form.inheritDefaultConfig ? t.yes : t.no} />
+      <PathRow label={t.envFileReview} value={!form.copyEnvFile ? t.envFileSkipped : form.envFileContent !== undefined ? t.envFileSaved : t.envFileNone} />
       <PathRow
         label={t.syncHistoryReview}
         value={form.syncHistory
@@ -2839,6 +2936,7 @@ function sanitizeProfileColor(value: string | undefined): string {
 }
 
 function isCurrentStepValid(step: WizardStep, form: typeof DEFAULT_FORM, subscriptionStatus: SubscriptionAuthorizationStatus | null): boolean {
+  if ((step === "env" || step === "generate") && form.copyEnvFile && form.envFileStatus !== "ready") return false;
   if (step === "profile") return Boolean(form.name.trim());
   if (form.authMode === "chatgpt_account") return true;
   if (form.authMode === "subscription") return subscriptionStatus?.state === "authorized";

@@ -162,6 +162,7 @@ export interface CreateProfileInput {
   subscriptionAuthorizationSessionId?: string;
   codexAppPath?: string;
   inheritDefaultConfig?: boolean;
+  envFile?: ProfileEnvFileInput;
   syncHistory?: SessionHistorySyncInput;
   launcherDirectory?: string;
   appearance?: Partial<ProfileAppearance>;
@@ -173,6 +174,19 @@ export interface CreateProfileInput {
     apiKey?: string;
     reasoningEffort?: ProviderConfig["reasoningEffort"];
   };
+}
+
+export interface ProfileEnvFileInput {
+  /** Defaults to true, independently of TOML/settings inheritance. */
+  copy: boolean;
+  /** When omitted, copy the source unchanged. An empty string creates an empty file. */
+  content?: string;
+}
+
+export interface DefaultProfileEnvFile {
+  path: string;
+  /** null means the source file does not exist. */
+  content: string | null;
 }
 
 export interface CreateProfileResult {
@@ -372,6 +386,7 @@ export interface CodexApi {
   onUpdateEvent(listener: (event: UpdateDownloadEvent) => void): () => void;
   openExternalUrl(url: string): Promise<{ ok: true }>;
   getEnvironmentReport(): Promise<EnvironmentReport>;
+  getDefaultProfileEnvFile(): Promise<DefaultProfileEnvFile>;
   getDiagnosticsReport(): Promise<DiagnosticsReport>;
   pickCodexAppPath(): Promise<string | null>;
   pickLauncherDirectory(): Promise<string | null>;

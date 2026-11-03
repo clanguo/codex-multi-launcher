@@ -429,7 +429,7 @@ code {
 
 .wizard-nav {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 6px;
   margin: 0 0 14px;
   padding: 0;
@@ -446,6 +446,36 @@ code {
   background: #f1f4f8;
   font-size: 11px;
   font-weight: 650;
+}
+
+.form .env-file-editor {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid #d7dee8;
+  border-radius: 10px;
+  color: #172033;
+  background: #fff;
+  font-family: Consolas, "SFMono-Regular", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  font-weight: 400;
+  tab-size: 2;
+}
+
+.form .env-file-editor:focus {
+  outline: 2px solid #bfdbfe;
+  border-color: #3b82f6;
+}
+
+.form .env-file-editor:disabled {
+  color: #667085;
+  background: #f1f4f8;
+}
+
+.env-source-path {
+  overflow-wrap: anywhere;
 }
 
 .wizard-nav li.current {

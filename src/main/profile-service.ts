@@ -7,6 +7,7 @@ import { createProfileRecord, findProfile, listProfiles, removeProfileRecord, re
 import { generateLauncher } from "./launcher.js";
 import { codexExecutablePath, findWindowsCodexAppxDesktopApp, getDefaultCodexHome, getRuntimePlatform, isWindowsAppsPath, isWindowsCodexGuiExecutable } from "./paths.js";
 import { pathExists } from "./fs-utils.js";
+import { writeProfileEnvFile } from "./profile-env.js";
 import { ensureWindowsAppxDesktopCache } from "./windows-appx-cache.js";
 import { restoreWindowsDesktopTaskbarIdentity } from "./windows-window-icon.js";
 import { listProviderModels, testProvider } from "./provider-test.js";
@@ -87,6 +88,7 @@ export async function createProfile(input: CreateProfileInput): Promise<CreatePr
     if (resolvedInput.inheritDefaultConfig) {
       await inheritDefaultCodexHomeResources(profile);
     }
+    await writeProfileEnvFile(profile, resolvedInput.envFile);
     if (resolvedInput.syncHistory?.enabled) {
       await syncSessionHistory(profile, resolvedInput.syncHistory, await resolveSessionHistorySources(resolvedInput, profile));
     }
