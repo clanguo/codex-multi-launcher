@@ -35,6 +35,7 @@
     "verify:paths": "npm run build:main && node scripts/verify-path-provider.mjs",
     "verify:win-launcher": "npm run build:main && node scripts/verify-windows-launcher.mjs",
     "verify:win-inheritance": "npm run build:main && node scripts/verify-windows-inheritance.mjs",
+    "verify:official-config": "npm run build:main && node scripts/verify-official-config-inheritance.mjs",
     "verify:win-profile-create": "npm run build:main && node scripts/verify-windows-profile-create-smoke.mjs",
     "verify:win-session-sync": "npm run build:main && node scripts/verify-windows-session-sync.mjs",
     "verify:subscription-auth": "npm run build:main && node scripts/verify-subscription-auth.mjs",
@@ -49,7 +50,8 @@
     "electron-updater": "^6.8.9",
     "lucide-react": "^0.561.0",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "smol-toml": "^1.9.1"
   },
   "devDependencies": {
     "@types/node": "^24.10.2",

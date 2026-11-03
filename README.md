@@ -57,6 +57,8 @@ Download packages from the [latest release](https://github.com/JqyModi/codex-mul
 
 Creates an isolated app window where you can sign in with a ChatGPT account. This mode does not require a Base URL or API key and does not overwrite the account session used by another profile.
 
+When inheriting settings, official OpenAI profiles (account login or API key) keep MCP servers, feature flags, trusted projects, skills, and plugins. Old provider definitions, endpoint overrides, login restrictions, selected TOML profiles, and custom model catalogs are cleared. Existing profiles receive the same cleanup on update or launch, with a config backup made before writing. Cleanup may reformat TOML and remove comments; the source config and account credentials are left unchanged.
+
 ### API key
 
 Supports the official OpenAI API and third-party endpoints that implement the Responses API. Compatibility depends on the provider's actual API behavior; a Chat Completions-only endpoint may not work with Codex Desktop.

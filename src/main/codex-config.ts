@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
+import { parse as parseToml, stringify as stringifyToml, type TomlTable, type TomlValue } from "smol-toml";
 import { ensureDir, pathExists } from "./fs-utils.js";
 import { getDefaultCodexHome, getRuntimePlatform } from "./paths.js";
 import type { ConfigBackupInfo, ManagedProfile, RestoreConfigBackupResult, SessionHistorySyncInput, SessionHistorySyncResolvedSource, SessionHistorySyncScope } from "../shared/types.js";
@@ -945,6 +946,42 @@ function removeProviderOverride(config: string, providerId: string): string {
     .trimEnd();
 }
 
+function isTomlTable(value: TomlValue | undefined): value is TomlTable {
+  return value !== null && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date);
+}
+
+function removeOfficialProviderOverrides(config: string): string {
+  // Provider and login settings belong to this profile. Inheriting an endpoint,
+  // a forced API login, or a selected TOML profile can override official login.
+  // Parse TOML so CRLF, quoted keys, inline tables and nested providers work alike.
+  const settings = parseToml(config, { integersAsBigInt: true });
+  const overrideKeys = [
+    "model_provider", "model_providers", "profile", "openai_base_url",
+    "chatgpt_base_url", "forced_login_method", "forced_chatgpt_workspace_id",
+    "model_catalog_json"
+  ];
+  const tables = [settings];
+  if (isTomlTable(settings.profiles)) {
+    for (const namedProfile of Object.values(settings.profiles)) {
+      if (isTomlTable(namedProfile)) {
+        tables.push(namedProfile);
+      }
+    }
+  }
+
+  let changed = false;
+  for (const table of tables) {
+    for (const key of overrideKeys) {
+      if (Object.hasOwn(table, key)) {
+        delete table[key];
+        changed = true;
+      }
+    }
+  }
+  // Preserve the original formatting when there are no overrides to remove.
+  return changed ? stringifyToml(settings, { numbersAsFloat: true }) : config;
+}
+
 function rewriteInheritedProfilePaths(config: string, profile: ManagedProfile): string {
   const defaultCodexHome = getDefaultCodexHome();
   const escapedDefaultCodexHome = escapeRegExp(defaultCodexHome);
@@ -968,7 +1005,11 @@ function normalizeProfileSpecificConfig(config: string, profile: ManagedProfile)
 }
 
 function mergeManagedConfig(config: string, profile: ManagedProfile): string {
-  const cleanedConfig = rewriteInheritedProfilePaths(removeProviderOverride(removeInheritedRootOverrides(stripManagedConfig(config)), profile.provider.id), profile);
+  const unmanagedConfig = stripManagedConfig(config.replace(/\r\n/g, "\n"));
+  const providerConfig = profile.provider.type === "official_openai"
+    ? removeOfficialProviderOverrides(unmanagedConfig)
+    : removeProviderOverride(unmanagedConfig, profile.provider.id);
+  const cleanedConfig = rewriteInheritedProfilePaths(removeInheritedRootOverrides(providerConfig), profile);
   const firstTableIndex = cleanedConfig.search(/^\s*\[[^\]]+\]/m);
   const managedConfig = renderManagedConfig(profile).trim();
 
