@@ -38,6 +38,8 @@
     "verify:official-config": "npm run build:main && node scripts/verify-official-config-inheritance.mjs",
     "verify:profile-env": "npm run build:main && node scripts/verify-env-profile-create.mjs",
     "verify:env-wizard": "npm run build && node scripts/verify-env-wizard.cjs && node scripts/verify-env-wizard.cjs --official-api",
+    "verify:runtime": "npm run build:main && node scripts/verify-profile-runtime.mjs",
+    "verify:runtime-native": "npm run build:main && node scripts/verify-profile-runtime-native.cjs",
     "verify:win-profile-create": "npm run build:main && node scripts/verify-windows-profile-create-smoke.mjs",
     "verify:win-session-sync": "npm run build:main && node scripts/verify-windows-session-sync.mjs",
     "verify:subscription-auth": "npm run build:main && node scripts/verify-subscription-auth.mjs",

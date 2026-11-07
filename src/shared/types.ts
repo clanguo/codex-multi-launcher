@@ -13,7 +13,7 @@ export interface SubscriptionAuthorizationOption {
 
 export type ProfileStatus = "active" | "disabled" | "deleted";
 
-export type RuntimeStatus = "running" | "not_running" | "unknown" | "error";
+export type RuntimeStatus = "running" | "background" | "starting" | "closing" | "not_running" | "unknown" | "error";
 
 export interface AppPaths {
   appDataDir: string;
@@ -98,7 +98,14 @@ export interface ProfileRuntimeInfo {
   status: RuntimeStatus;
   pid: number | null;
   detail: string;
+  hasWindow?: boolean | null;
+  canForceClose?: boolean;
+  checkedAt?: number;
 }
+
+export interface RuntimeSnapshot { revision: number; profiles: ProfileRuntimeInfo[] }
+export interface OpenProfileResult { pid: number | null; action: "started" | "starting" | "focused" | "attention" }
+export interface CloseProfileResult { action: "closing" | "not_running" }
 
 export interface ConfigBackupInfo {
   profileId: string;
@@ -394,6 +401,8 @@ export interface CodexApi {
   listProfiles(includeDeleted?: boolean): Promise<ManagedProfile[]>;
   listConfigBackups(profileId: string): Promise<ConfigBackupInfo[]>;
   getRuntimeStatus(): Promise<ProfileRuntimeInfo[]>;
+  getRuntimeSnapshot(): Promise<RuntimeSnapshot>;
+  onRuntimeChanged(listener: (snapshot: RuntimeSnapshot) => void): () => void;
   testProvider(input: ProviderTestInput): Promise<ProviderTestResult>;
   testProfileProvider(input: ProfileProviderTestInput): Promise<ProviderTestResult>;
   listProviderModels(input: ProviderModelsInput): Promise<ProviderModelsResult>;
@@ -409,5 +418,6 @@ export interface CodexApi {
   permanentlyDeleteProfile(profileId: string): Promise<{ ok: true }>;
   restoreProfile(profileId: string): Promise<{ ok: true }>;
   generateLauncher(profileId: string): Promise<LauncherResult>;
-  openProfile(profileId: string): Promise<{ pid: number | null }>;
+  openProfile(profileId: string): Promise<OpenProfileResult>;
+  closeProfile(profileId: string, force?: boolean): Promise<CloseProfileResult>;
 }

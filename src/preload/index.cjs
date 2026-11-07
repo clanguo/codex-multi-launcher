@@ -25,6 +25,12 @@ const api = {
   listConfigBackups: (profileId) => ipcRenderer.invoke("profiles:backups", profileId),
   restoreConfigBackup: (input) => ipcRenderer.invoke("profiles:restore-backup", input),
   getRuntimeStatus: () => ipcRenderer.invoke("profiles:runtime"),
+  getRuntimeSnapshot: () => ipcRenderer.invoke("profiles:runtime-snapshot"),
+  onRuntimeChanged: (listener) => {
+    const wrappedListener = (_event, snapshot) => listener(snapshot);
+    ipcRenderer.on("profiles:runtime-changed", wrappedListener);
+    return () => ipcRenderer.removeListener("profiles:runtime-changed", wrappedListener);
+  },
   testProvider: (input) => ipcRenderer.invoke("provider:test", input),
   testProfileProvider: (input) => ipcRenderer.invoke("profiles:test-provider", input),
   listProviderModels: (input) => ipcRenderer.invoke("provider:models", input),
@@ -39,7 +45,8 @@ const api = {
   permanentlyDeleteProfile: (profileId) => ipcRenderer.invoke("profiles:delete-permanently", profileId),
   restoreProfile: (profileId) => ipcRenderer.invoke("profiles:restore", profileId),
   generateLauncher: (profileId) => ipcRenderer.invoke("profiles:generate-launcher", profileId),
-  openProfile: (profileId) => ipcRenderer.invoke("profiles:open", profileId)
+  openProfile: (profileId) => ipcRenderer.invoke("profiles:open", profileId),
+  closeProfile: (profileId, force) => ipcRenderer.invoke("profiles:close", profileId, force)
 };
 
 contextBridge.exposeInMainWorld("codexProfileManager", api);

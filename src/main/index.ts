@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url";
 import { getEnvironmentReport } from "./environment.js";
 import { getDiagnosticsReport } from "./diagnostics.js";
 import { getDefaultProfileEnvFile } from "./profile-env.js";
+import { getProfileRuntime } from "./runtime-monitor.js";
 import { buildApplicationMenuTemplate, type ApplicationMenuLabels } from "./application-menu.js";
 import { APP_NAME, configurePathProvider } from "./paths.js";
 import {
   createProfile,
+  closeProfile,
   deleteProfile,
   generateProfileLauncher,
   getRuntimeStatus,
@@ -202,7 +204,13 @@ function createWindow(): void {
     }
   });
   applyWindowLanguage(initialLanguage);
+  mainWindow.on("focus", () => { getProfileRuntime().setForeground(true); getProfileRuntime().requestRefresh(); });
+  mainWindow.on("blur", () => getProfileRuntime().setForeground(false));
+  mainWindow.on("minimize", () => getProfileRuntime().setForeground(false));
+  mainWindow.on("hide", () => getProfileRuntime().setForeground(false));
+  mainWindow.on("restore", () => getProfileRuntime().setForeground(true));
   mainWindow.on("closed", () => {
+    getProfileRuntime().setForeground(false);
     mainWindow = null;
   });
 
@@ -312,6 +320,7 @@ function registerIpc(): void {
   ipcMain.handle("profiles:backups", (_event, profileId: string) => listConfigBackups(profileId));
   ipcMain.handle("profiles:restore-backup", (_event, input: RestoreConfigBackupInput) => restoreConfigBackup(input));
   ipcMain.handle("profiles:runtime", () => getRuntimeStatus());
+  ipcMain.handle("profiles:runtime-snapshot", () => getProfileRuntime().refresh(true));
   ipcMain.handle("provider:test", (_event, input: ProviderTestInput) => testProvider(input));
   ipcMain.handle("profiles:test-provider", (_event, input: ProfileProviderTestInput) => testProfileProvider(input));
   ipcMain.handle("provider:models", (_event, input: ProviderModelsInput) => listProviderModels(input));
@@ -335,7 +344,11 @@ function registerIpc(): void {
     cancelSubscriptionAuthorization(sessionId);
     return { ok: true };
   });
-  ipcMain.handle("profiles:create", (_event, input: CreateProfileInput) => createProfile(input));
+  ipcMain.handle("profiles:create", async (_event, input: CreateProfileInput) => {
+    const result = await createProfile(input);
+    getProfileRuntime().requestRefresh();
+    return result;
+  });
   ipcMain.handle("profiles:update", (_event, input: UpdateProfileInput) => updateProfile(input));
   ipcMain.handle("profiles:reauthorize-subscription", (_event, input: ReauthorizeSubscriptionProfileInput) => reauthorizeSubscriptionProfile(input));
   ipcMain.handle("profiles:delete", (_event, profileId: string) => deleteProfile(profileId));
@@ -343,6 +356,7 @@ function registerIpc(): void {
   ipcMain.handle("profiles:restore", (_event, profileId: string) => restoreProfile(profileId));
   ipcMain.handle("profiles:generate-launcher", (_event, profileId: string) => generateProfileLauncher(profileId));
   ipcMain.handle("profiles:open", (_event, profileId: string) => openProfile(profileId));
+  ipcMain.handle("profiles:close", (_event, profileId: string, force?: boolean) => closeProfile(profileId, force === true));
 }
 
 function emitUpdateEvent(event: UpdateDownloadEvent): void {
@@ -769,6 +783,13 @@ void app.whenReady().then(() => {
     userData: () => app.getPath("userData")
   });
   registerIpc();
+  const runtime = getProfileRuntime();
+  runtime.subscribe((snapshot) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) window.webContents.send("profiles:runtime-changed", snapshot);
+    }
+  });
+  runtime.start();
   void refreshActiveProfileLaunchers().catch((error) => {
     console.warn("[launchers] Failed to refresh active profile launchers", error);
   });
@@ -791,3 +812,5 @@ app.on("window-all-closed", () => {
     app.quit();
   }
 });
+
+app.on("before-quit", () => getProfileRuntime().dispose());

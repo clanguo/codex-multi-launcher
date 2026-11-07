@@ -13,6 +13,7 @@ import { restoreWindowsDesktopTaskbarIdentity } from "./windows-window-icon.js";
 import { listProviderModels, testProvider } from "./provider-test.js";
 import { deleteProfileSecrets, getApiKey, upsertApiKey } from "./secrets.js";
 import { getRuntimeStatus as inspectRuntimeStatus } from "./runtime.js";
+import { getProfileRuntime } from "./runtime-monitor.js";
 import { cancelSubscriptionAuthorization, getAuthorizedSubscriptionConfig } from "./subscription-auth.js";
 import type { ConfigBackupInfo, CreateProfileInput, CreateProfileResult, LauncherResult, ManagedProfile, ProfileProviderModelsInput, ProfileProviderTestInput, ProfileRuntimeInfo, ProviderModelsResult, ProviderTestResult, ReauthorizeSubscriptionProfileInput, RestoreConfigBackupInput, RestoreConfigBackupResult, SessionHistorySyncResolvedSource, UpdateProfileInput, UpdateProfileResult } from "../shared/types.js";
 
@@ -301,8 +302,16 @@ export async function restoreProfile(profileId: string): Promise<{ ok: true }> {
   return { ok: true };
 }
 
-export async function openProfile(profileId: string): Promise<{ pid: number | null }> {
-  const profile = await repairProfileCodexAppPath(await mustFindProfile(profileId));
+export async function openProfile(profileId: string) {
+  const profile = await mustFindProfile(profileId);
+  return getProfileRuntime().open(profile, async () => launchProfile(await repairProfileCodexAppPath(profile)));
+}
+
+export async function closeProfile(profileId: string, force = false) {
+  return getProfileRuntime().close(await mustFindProfile(profileId), force);
+}
+
+async function launchProfile(profile: ManagedProfile): Promise<{ pid: number | null }> {
   const launchLog = await createLaunchLog(profile);
   await launchLog.append("openProfile started", {
     profileId: profile.id,
@@ -382,6 +391,7 @@ export async function openProfile(profileId: string): Promise<{ pid: number | nu
     const child = spawn(launchCommand.command, launchCommand.args, spawnOptions);
 
     child.once("spawn", () => {
+      getProfileRuntime().processSpawned(profile.id, child.pid);
       void launchLog.append("desktop app process spawned", { pid: child.pid ?? null });
       if (getRuntimePlatform() === "win32" && child.pid && windowsAppUserModelId) {
         void restoreWindowsDesktopTaskbarIdentity(child.pid, windowsAppUserModelId)
@@ -395,9 +405,11 @@ export async function openProfile(profileId: string): Promise<{ pid: number | nu
     });
     child.once("exit", (code, signal) => {
       spawnOutput.close();
+      getProfileRuntime().processExited(profile.id, child.pid);
       void launchLog.append("desktop app process exited", { pid: child.pid ?? null, code, signal });
     });
 
+    await new Promise<void>((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
     child.unref();
     await updateProfileLaunchMetadata(profile.id, child.pid ?? null);
     await launchLog.append("openProfile finished", { pid: child.pid ?? null, logPath: launchLog.path });

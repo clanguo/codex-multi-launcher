@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AnnouncementLocale, CodexApi, CreateProfileInput, ReauthorizeSubscriptionProfileInput, UpdateDownloadEvent } from "../shared/types.js";
+import type { AnnouncementLocale, CodexApi, CreateProfileInput, ReauthorizeSubscriptionProfileInput, RuntimeSnapshot, UpdateDownloadEvent } from "../shared/types.js";
 
 const api: CodexApi = {
   getAppInfo: () => ipcRenderer.invoke("app:get-info"),
@@ -26,6 +26,12 @@ const api: CodexApi = {
   listConfigBackups: (profileId: string) => ipcRenderer.invoke("profiles:backups", profileId),
   restoreConfigBackup: (input) => ipcRenderer.invoke("profiles:restore-backup", input),
   getRuntimeStatus: () => ipcRenderer.invoke("profiles:runtime"),
+  getRuntimeSnapshot: () => ipcRenderer.invoke("profiles:runtime-snapshot"),
+  onRuntimeChanged: (listener: (snapshot: RuntimeSnapshot) => void) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, snapshot: RuntimeSnapshot) => listener(snapshot);
+    ipcRenderer.on("profiles:runtime-changed", wrappedListener);
+    return () => ipcRenderer.removeListener("profiles:runtime-changed", wrappedListener);
+  },
   testProvider: (input) => ipcRenderer.invoke("provider:test", input),
   testProfileProvider: (input) => ipcRenderer.invoke("profiles:test-provider", input),
   listProviderModels: (input) => ipcRenderer.invoke("provider:models", input),
@@ -40,7 +46,8 @@ const api: CodexApi = {
   permanentlyDeleteProfile: (profileId: string) => ipcRenderer.invoke("profiles:delete-permanently", profileId),
   restoreProfile: (profileId: string) => ipcRenderer.invoke("profiles:restore", profileId),
   generateLauncher: (profileId: string) => ipcRenderer.invoke("profiles:generate-launcher", profileId),
-  openProfile: (profileId: string) => ipcRenderer.invoke("profiles:open", profileId)
+  openProfile: (profileId: string) => ipcRenderer.invoke("profiles:open", profileId),
+  closeProfile: (profileId: string, force?: boolean) => ipcRenderer.invoke("profiles:close", profileId, force)
 };
 
 contextBridge.exposeInMainWorld("codexProfileManager", api);
