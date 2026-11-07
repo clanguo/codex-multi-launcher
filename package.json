@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "build": "npm run build:main && npm run build:renderer",
-    "build:main": "tsc -p tsconfig.main.json && node scripts/copy-preload.mjs",
+    "build:main": "tsc -p tsconfig.main.json && node scripts/copy-preload.mjs && node scripts/build-cli-shim.mjs",
     "build:renderer": "tsc -p tsconfig.renderer.json && vite build",
     "dev": "npm run build:main && concurrently -k \"tsc -p tsconfig.main.json --watch\" \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
     "build:icon": "node scripts/build-icon.mjs",
@@ -41,6 +41,7 @@
     "verify:runtime": "npm run build:main && node scripts/verify-profile-runtime.mjs",
     "verify:runtime-native": "npm run build:main && node scripts/verify-profile-runtime-native.cjs",
     "verify:runtime-ui": "npm run build && node scripts/verify-env-wizard.cjs --runtime",
+    "verify:profile-cli": "npm run build:main && node scripts/verify-profile-cli.mjs",
     "verify:win-profile-create": "npm run build:main && node scripts/verify-windows-profile-create-smoke.mjs",
     "verify:win-session-sync": "npm run build:main && node scripts/verify-windows-session-sync.mjs",
     "verify:subscription-auth": "npm run build:main && node scripts/verify-subscription-auth.mjs",

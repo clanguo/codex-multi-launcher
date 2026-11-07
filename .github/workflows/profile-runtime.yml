@@ -1,16 +1,18 @@
-name: Profile runtime
+name: Profile runtime and CLI
 
 on:
   push:
     paths:
       - "src/**"
       - "scripts/verify*"
+      - "scripts/build-cli-shim.mjs"
       - "package*.json"
       - ".github/workflows/profile-runtime.yml"
   pull_request:
     paths:
       - "src/**"
       - "scripts/verify*"
+      - "scripts/build-cli-shim.mjs"
       - "package*.json"
       - ".github/workflows/profile-runtime.yml"
   workflow_dispatch:
@@ -36,4 +38,5 @@ jobs:
       - run: npm run build
       - run: node scripts/verify-profile-runtime.mjs
       - run: node scripts/verify-profile-runtime-native.cjs
+      - run: node scripts/verify-profile-cli.mjs
       - run: node scripts/verify-env-wizard.cjs --runtime

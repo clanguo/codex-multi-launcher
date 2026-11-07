@@ -85,12 +85,22 @@ export function getAppPaths(): AppPaths {
     masterKeyFile: path.join(appDataDir, "master.key"),
     defaultProfileRoot: path.join(home, ".codex-profiles"),
     defaultUserDataRoot: path.join(provider.appData(), "Codex Profiles"),
-    defaultLauncherRoot: defaultLauncherRoot(home)
+    defaultLauncherRoot: defaultLauncherRoot(home),
+    defaultCliRoot: path.join(home, ".codex-profile-bin")
   };
 }
 
 export function getDefaultCodexHome(): string {
   return path.join(getPathProvider().home(), ".codex");
+}
+
+export function profileCliCommand(profileId: string): string {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(profileId)) throw new Error("Invalid profile ID for a CLI command.");
+  return `codex-${profileId}`;
+}
+
+export function profileCliPath(profileId: string): string {
+  return path.join(getAppPaths().defaultCliRoot, `${profileCliCommand(profileId)}${getRuntimePlatform() === "win32" ? ".exe" : ""}`);
 }
 
 export function getDefaultCodexAppPath(): string {

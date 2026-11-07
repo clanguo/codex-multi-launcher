@@ -1,6 +1,6 @@
 import path from "node:path";
 import { ensureDir, readJsonFile, writeJsonFile } from "./fs-utils.js";
-import { getAppPaths, isWindowsCodexGuiExecutable, launcherFileName, resolveCodexDesktopApp, slugifyProfileName } from "./paths.js";
+import { getAppPaths, isWindowsCodexGuiExecutable, launcherFileName, profileCliPath, resolveCodexDesktopApp, slugifyProfileName } from "./paths.js";
 import { pathExists } from "./fs-utils.js";
 import type { CreateProfileInput, ManagedProfile, ProfileRegistry, UpdateProfileInput } from "../shared/types.js";
 
@@ -67,7 +67,8 @@ export async function createProfileRecord(input: CreateProfileInput): Promise<Ma
       codexAppPath: desktopApp.appPath,
       codexHome,
       userDataDir,
-      launcherPath
+      launcherPath,
+      cliLauncherPath: profileCliPath(id)
     },
     provider: {
       type: input.provider.type,
@@ -204,6 +205,7 @@ export async function updateProfileLaunchMetadata(profileId: string, pid: number
 }
 
 function normalizeProfile(profile: ManagedProfile): ManagedProfile {
+  profile.paths.cliLauncherPath = profileCliPath(profile.id);
   profile.auth = {
     mode: profile.auth?.mode ?? "api_key"
   };

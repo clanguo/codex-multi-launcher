@@ -5,6 +5,8 @@ import path from "node:path";
 import { inheritDefaultCodexHomeResources, listConfigBackups as listProfileConfigBackups, repairProfileGlobalState, restoreConfigBackup as restoreProfileConfigBackup, syncSessionHistory, writeCodexAuth, writeCodexConfig } from "./codex-config.js";
 import { createProfileRecord, findProfile, listProfiles, removeProfileRecord, repairProfileCodexAppPath, restoreProfileRecord, softDeleteProfile, updateProfileLaunchMetadata, updateProfileRecord } from "./registry.js";
 import { generateLauncher } from "./launcher.js";
+import { generateCliLauncher, removeCliLauncher } from "./cli-launcher.js";
+import { registerProfileCliPath } from "./cli-path.js";
 import { codexExecutablePath, findWindowsCodexAppxDesktopApp, getDefaultCodexHome, getRuntimePlatform, isWindowsAppsPath, isWindowsCodexGuiExecutable } from "./paths.js";
 import { pathExists } from "./fs-utils.js";
 import { writeProfileEnvFile } from "./profile-env.js";
@@ -71,6 +73,7 @@ export async function createProfile(input: CreateProfileInput): Promise<CreatePr
     : input;
   const profile = await createProfileRecord(resolvedInput);
 
+  let launcherCreated = false;
   try {
     if (isApiKeyProfile(profile)) {
       const apiKey = resolvedInput.provider.apiKey?.trim();
@@ -94,7 +97,9 @@ export async function createProfile(input: CreateProfileInput): Promise<CreatePr
       await syncSessionHistory(profile, resolvedInput.syncHistory, await resolveSessionHistorySources(resolvedInput, profile));
     }
     const configPath = await writeCodexConfig(profile, { inheritDefaultConfig: resolvedInput.inheritDefaultConfig });
+    await generateCliLauncher(profile);
     const launcher = await generateLauncher(profile);
+    launcherCreated = true;
 
     if (subscriptionSessionId) {
       cancelSubscriptionAuthorization(subscriptionSessionId);
@@ -106,9 +111,7 @@ export async function createProfile(input: CreateProfileInput): Promise<CreatePr
       launcherPath: launcher.launcherPath
     };
   } catch (error) {
-    if (subscriptionSessionId) {
-      await cleanupFailedProfileCreation(profile);
-    }
+    await cleanupFailedProfileCreation(profile, launcherCreated);
     throw error;
   }
 }
@@ -170,12 +173,22 @@ function dedupeSessionHistorySources(sources: SessionHistorySyncResolvedSource[]
 
 export async function generateProfileLauncher(profileId: string): Promise<LauncherResult> {
   const profile = await mustFindProfile(profileId);
+  await generateCliLauncher(profile);
   return generateLauncher(profile);
 }
 
 export async function refreshActiveProfileLaunchers(): Promise<void> {
   const profiles = await listProfiles();
-  await Promise.all(profiles.map((profile) => generateLauncher(profile)));
+  await Promise.all(profiles.map(async (profile) => { await generateCliLauncher(profile); await generateLauncher(profile); }));
+}
+
+export async function getProfileCliInfo(profileId: string, refreshPath = false) {
+  const result = await generateCliLauncher(await mustFindProfile(profileId));
+  if (refreshPath) {
+    const registration = await registerProfileCliPath({ force: true });
+    return { ...result, pathRegistered: registration.registered, pathError: registration.error };
+  }
+  return result;
 }
 
 export async function updateProfile(input: UpdateProfileInput): Promise<UpdateProfileResult> {
@@ -193,6 +206,7 @@ export async function updateProfile(input: UpdateProfileInput): Promise<UpdatePr
   }
 
   const configPath = await writeCodexConfig(profile, { preserveExistingConfig: true });
+  await generateCliLauncher(profile);
   const launcher = await generateLauncher(profile);
 
   return {
@@ -289,6 +303,7 @@ export async function deleteProfile(profileId: string): Promise<{ ok: true }> {
 export async function permanentlyDeleteProfile(profileId: string): Promise<{ ok: true }> {
   const profile = await removeProfileRecord(profileId);
   await deleteProfileSecrets(profile.id);
+  await removeCliLauncher(profile);
   await Promise.all([
     fs.rm(profile.paths.codexHome, { force: true, recursive: true }),
     fs.rm(profile.paths.userDataDir, { force: true, recursive: true }),
@@ -424,13 +439,14 @@ function isApiKeyProfile(profile: ManagedProfile): boolean {
   return (profile.auth?.mode ?? "api_key") !== "chatgpt_account";
 }
 
-async function cleanupFailedProfileCreation(profile: ManagedProfile): Promise<void> {
+async function cleanupFailedProfileCreation(profile: ManagedProfile, launcherCreated = false): Promise<void> {
   await removeProfileRecord(profile.id).catch(() => undefined);
   await deleteProfileSecrets(profile.id).catch(() => undefined);
+  await removeCliLauncher(profile).catch(() => undefined);
   await Promise.all([
     fs.rm(profile.paths.codexHome, { force: true, recursive: true }),
     fs.rm(profile.paths.userDataDir, { force: true, recursive: true }),
-    fs.rm(profile.paths.launcherPath, { force: true, recursive: true })
+    ...(launcherCreated ? [fs.rm(profile.paths.launcherPath, { force: true, recursive: true })] : [])
   ]);
 }
 

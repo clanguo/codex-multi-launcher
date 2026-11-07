@@ -23,6 +23,7 @@ export interface AppPaths {
   defaultProfileRoot: string;
   defaultUserDataRoot: string;
   defaultLauncherRoot: string;
+  defaultCliRoot: string;
 }
 
 export interface EnvironmentCheck {
@@ -62,6 +63,7 @@ export interface ProfilePaths {
   codexHome: string;
   userDataDir: string;
   launcherPath: string;
+  cliLauncherPath: string;
 }
 
 export interface LaunchMetadata {
@@ -315,6 +317,15 @@ export interface LauncherResult {
   executablePath: string;
 }
 
+export interface ProfileCliInfo {
+  command: string;
+  executablePath: string;
+  pathEntry: string;
+  cliExecutablePath: string | null;
+  pathRegistered: boolean;
+  pathError?: string;
+}
+
 export interface AppInfo {
   name: string;
   version: string;
@@ -418,6 +429,7 @@ export interface CodexApi {
   permanentlyDeleteProfile(profileId: string): Promise<{ ok: true }>;
   restoreProfile(profileId: string): Promise<{ ok: true }>;
   generateLauncher(profileId: string): Promise<LauncherResult>;
+  getProfileCliInfo(profileId: string, refreshPath?: boolean): Promise<ProfileCliInfo>;
   openProfile(profileId: string): Promise<OpenProfileResult>;
   closeProfile(profileId: string, force?: boolean): Promise<CloseProfileResult>;
 }

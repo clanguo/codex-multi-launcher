@@ -15,6 +15,7 @@ import {
   deleteProfile,
   generateProfileLauncher,
   getRuntimeStatus,
+  getProfileCliInfo,
   listProfileProviderModels,
   listConfigBackups,
   listProfiles,
@@ -355,6 +356,7 @@ function registerIpc(): void {
   ipcMain.handle("profiles:delete-permanently", (_event, profileId: string) => permanentlyDeleteProfile(profileId));
   ipcMain.handle("profiles:restore", (_event, profileId: string) => restoreProfile(profileId));
   ipcMain.handle("profiles:generate-launcher", (_event, profileId: string) => generateProfileLauncher(profileId));
+  ipcMain.handle("profiles:cli-info", (_event, profileId: string, refreshPath?: boolean) => getProfileCliInfo(profileId, refreshPath === true));
   ipcMain.handle("profiles:open", (_event, profileId: string) => openProfile(profileId));
   ipcMain.handle("profiles:close", (_event, profileId: string, force?: boolean) => closeProfile(profileId, force === true));
 }

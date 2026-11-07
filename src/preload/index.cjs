@@ -45,6 +45,7 @@ const api = {
   permanentlyDeleteProfile: (profileId) => ipcRenderer.invoke("profiles:delete-permanently", profileId),
   restoreProfile: (profileId) => ipcRenderer.invoke("profiles:restore", profileId),
   generateLauncher: (profileId) => ipcRenderer.invoke("profiles:generate-launcher", profileId),
+  getProfileCliInfo: (profileId, refreshPath) => ipcRenderer.invoke("profiles:cli-info", profileId, refreshPath),
   openProfile: (profileId) => ipcRenderer.invoke("profiles:open", profileId),
   closeProfile: (profileId, force) => ipcRenderer.invoke("profiles:close", profileId, force)
 };
