@@ -37,6 +37,7 @@ Codex 多开助手将这些操作整理成了可视化创建流程。
 - 支持从源 App 和已有多开配置中选择历史来源。
 - 每个配置独立使用 `CODEX_HOME` 和 `--user-data-dir`。
 - 在主程序中直接打开对应的独立窗口。
+- 每个 profile 生成独立 Codex CLI 命令，支持 Windows、macOS 用户 PATH 注册。
 - 支持应用内检查、下载和安装更新。
 - API Key 本地加密保存，不进入诊断信息。
 - 保留 Codex 全局状态、新增项目和历史对话，重启后不会被重复初始化。
@@ -64,6 +65,12 @@ Codex 多开助手将这些操作整理成了可视化创建流程。
 ### API Key
 
 支持官方 OpenAI API 和实现了 Responses API 的第三方兼容接口。是否可用取决于服务商的实际接口能力；只支持 Chat Completions 的接口不一定能在 Codex 桌面版中使用。
+
+## 独立 CLI 命令
+
+可以将 `codex-api1`、`codex-api2` 等命令填入 Multica 或其他平台的自定义 Codex 命令栏。每个命令绑定对应 profile 的配置、认证和 `.env`，并保留平台的参数、工作目录和标准输入输出。新旧 profile 都会生成命令，可在详情中复制命令名或可执行路径。
+
+电脑上需安装基础 Codex CLI。首次注册 PATH 后，请重新打开终端并重启外部平台或 daemon。详见[配置与环境变量说明](docs/profile-cli.zh-CN.md)。
 
 ## 历史对话同步
 

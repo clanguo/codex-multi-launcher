@@ -37,6 +37,7 @@ Codex Multi Launcher turns those workflows into a guided desktop interface.
 - Import history from the source app and from existing launcher profiles.
 - Keep `CODEX_HOME` and `--user-data-dir` isolated for every profile.
 - Generate launchers that can be opened directly from the app.
+- Generate a separate Codex CLI command per profile, with user PATH registration on Windows and macOS.
 - Check for updates and install supported releases from inside the app.
 - Encrypt API keys locally and exclude them from diagnostics.
 - Preserve Codex global state, project lists, and conversation history across restarts.
@@ -80,6 +81,12 @@ Unedited copies retain all variables, comments, blank lines, and line endings. T
 Each profile shows its current runtime status. Use **Start** for a stopped profile, **Open window** to activate its existing instance, and **Close** to request a normal exit. If the app remains open after eight seconds, a separate **Force stop** action becomes available and asks for confirmation.
 
 Status changes are pushed to the UI. Checks run every three seconds while the manager is in the foreground and every fifteen seconds in the background, with immediate checks after launch/exit and a thirty-second discovery interval for externally started instances. Windows reuses one native PowerShell helper and checks cached process identities between discovery scans; macOS uses targeted `ps` queries and AppKit actions by PID. See [runtime implementation and verification](docs/runtime-management.md).
+
+## Profile CLI Commands
+
+Use commands such as `codex-api1` and `codex-api2` in Multica or another platform's custom Codex executable field. Each command binds the profile's configuration, authentication and `.env`, while preserving the platform's arguments, working directory and input/output. Commands are generated for new and existing profiles; copy the name or executable path from the profile details.
+
+Install a base Codex CLI, then reopen terminals and restart the external platform or daemon after initial PATH registration. See [setup and environment behavior](docs/profile-cli.md).
 
 ## Conversation History Sync
 
