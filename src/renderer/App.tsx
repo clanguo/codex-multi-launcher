@@ -23,6 +23,7 @@ import {
   RefreshCcw,
   Rocket,
   Settings,
+  Square,
   TestTube2,
   Trash2,
   TriangleAlert,
@@ -39,6 +40,7 @@ import type {
   AnnouncementItem,
   ManagedProfile,
   ProfileRuntimeInfo,
+  RuntimeSnapshot,
   ProviderModelsResult,
   ProviderTestResult,
   SubscriptionAuthorizationSession,
@@ -88,6 +90,15 @@ const TEXT: Record<Language, Record<string, string>> = {
     runtimeRunning: "运行中",
     runtimeNotRunning: "未运行",
     runtimeUnknown: "未知",
+    runtimeStarting: "启动中",
+    runtimeClosing: "关闭中",
+    runtimeBackground: "后台运行",
+    runtimeError: "启动异常",
+    startProfile: "启动",
+    openWindow: "打开窗口",
+    closeProfile: "关闭",
+    forceStopProfile: "强制结束",
+    forceStopConfirm: "强制结束可能中断正在执行的任务。确认结束这个 profile 吗？",
     environment: "运行诊断",
     environmentOk: "运行正常",
     environmentProblem: "发现 {count} 个问题",
@@ -320,6 +331,15 @@ const TEXT: Record<Language, Record<string, string>> = {
     runtimeRunning: "Running",
     runtimeNotRunning: "Not running",
     runtimeUnknown: "Unknown",
+    runtimeStarting: "Starting",
+    runtimeClosing: "Closing",
+    runtimeBackground: "Background",
+    runtimeError: "Launch error",
+    startProfile: "Start",
+    openWindow: "Open window",
+    closeProfile: "Close",
+    forceStopProfile: "Force stop",
+    forceStopConfirm: "Force stopping may interrupt running tasks. Stop this profile?",
     environment: "Run Diagnostics",
     environmentOk: "Running normally",
     environmentProblem: "{count} issue(s) found",
@@ -563,6 +583,8 @@ export function App() {
   const [environment, setEnvironment] = useState<EnvironmentReport | null>(null);
   const [profiles, setProfiles] = useState<ManagedProfile[]>([]);
   const [runtimeStatuses, setRuntimeStatuses] = useState<ProfileRuntimeInfo[]>([]);
+  const runtimeRevision = useRef(-1);
+  const [busyProfileIds, setBusyProfileIds] = useState<Set<string>>(() => new Set());
   const [showDeletedProfiles, setShowDeletedProfiles] = useState(false);
   const [configBackups, setConfigBackups] = useState<ConfigBackupInfo[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
@@ -620,6 +642,8 @@ export function App() {
     () => visibleProfiles.find((profile) => profile.id === selectedProfileId) ?? visibleProfiles[0] ?? null,
     [selectedProfileId, visibleProfiles]
   );
+  const selectedRuntime = selectedProfile ? runtimeByProfileId.get(selectedProfile.id) : undefined;
+  const selectedProfileBusy = Boolean(selectedProfile && busyProfileIds.has(selectedProfile.id));
 
   const currentStepIndex = WIZARD_STEPS.findIndex((step) => step === wizardStep);
   const canGoBack = currentStepIndex > 0;
@@ -627,7 +651,7 @@ export function App() {
   const t = TEXT[language];
   const languageText = (zh: string, en: string, ru: string): string => language === "zh" ? zh : language === "ru" ? ru : en;
   const runningProfiles = useMemo(
-    () => activeProfiles.filter((profile) => runtimeByProfileId.get(profile.id)?.status === "running"),
+    () => activeProfiles.filter((profile) => isProfileRunning(runtimeByProfileId.get(profile.id))),
     [activeProfiles, runtimeByProfileId]
   );
   const environmentIssues = useMemo(
@@ -642,7 +666,8 @@ export function App() {
         window.codexProfileManager.getEnvironmentReport(),
         window.codexProfileManager.listProfiles(showDeletedProfiles)
       ]);
-      const runtime = await window.codexProfileManager.getRuntimeStatus();
+      const snapshot = await window.codexProfileManager.getRuntimeSnapshot();
+      const runtime = snapshot.profiles;
       const runtimeMap = new Map(runtime.map((item) => [item.profileId, item]));
       const firstVisibleProfile = sortProfilesByRuntime(
         profileList.filter((profile) => profile.status !== "deleted"),
@@ -650,7 +675,7 @@ export function App() {
       )[0] ?? profileList[0] ?? null;
       setEnvironment(environmentReport);
       setProfiles(profileList);
-      setRuntimeStatuses(runtime);
+      applyRuntimeSnapshot(snapshot);
       setSelectedProfileId((current) => profileList.some((profile) => profile.id === current) ? current : firstVisibleProfile?.id ?? null);
     } finally {
       setIsRefreshing(false);
@@ -660,6 +685,14 @@ export function App() {
   useEffect(() => {
     void refresh();
   }, [showDeletedProfiles]);
+
+  function applyRuntimeSnapshot(snapshot: RuntimeSnapshot) {
+    if (snapshot.revision < runtimeRevision.current) return;
+    runtimeRevision.current = snapshot.revision;
+    setRuntimeStatuses(snapshot.profiles);
+  }
+
+  useEffect(() => window.codexProfileManager.onRuntimeChanged(applyRuntimeSnapshot), []);
 
   useEffect(() => {
     if (!isCreateProfileOpen || form.envFileStatus !== "loading") return;
@@ -1008,16 +1041,41 @@ export function App() {
 
   async function openSelectedProfile() {
     if (!selectedProfile) return;
+    const profile = selectedProfile;
+    setBusyProfileIds((current) => new Set(current).add(profile.id));
     try {
-      const result = await window.codexProfileManager.openProfile(selectedProfile.id);
+      const result = await window.codexProfileManager.openProfile(profile.id);
+      if (result.action === "focused" || result.action === "attention") {
+        showToast(result.action === "focused"
+          ? languageText(`已打开 ${profile.name} 的原窗口。`, `Opened the existing ${profile.name} window.`, `Открыто существующее окно ${profile.name}.`)
+          : languageText("已定位原窗口，请从任务栏或 Dock 切换到该窗口。", "The existing app was located. Select its window from the taskbar or Dock.", "Приложение найдено. Выберите его окно на панели задач или в Dock."));
+        return;
+      }
       showToast(languageText(
-        result.pid ? `已打开 ${selectedProfile.name}，进程号 ${result.pid}。` : `已打开 ${selectedProfile.name}。`,
-        result.pid ? `Launched ${selectedProfile.name} with PID ${result.pid}.` : `Launched ${selectedProfile.name}.`,
-        result.pid ? `Профиль ${selectedProfile.name} открыт, PID: ${result.pid}.` : `Профиль ${selectedProfile.name} открыт.`
+        `正在启动 ${profile.name}。`,
+        `Starting ${profile.name}.`,
+        `Профиль ${profile.name} запускается.`
       ));
-      window.setTimeout(() => void refresh(), 1200);
     } catch (error) {
       showToast(error instanceof Error ? error.message : languageText("打开失败。", "Failed to open profile.", "Не удалось открыть профиль."));
+    } finally {
+      setBusyProfileIds((current) => { const next = new Set(current); next.delete(profile.id); return next; });
+    }
+  }
+
+  async function closeSelectedProfile(force = false) {
+    if (!selectedProfile || (force && !window.confirm(t.forceStopConfirm))) return;
+    const profile = selectedProfile;
+    setBusyProfileIds((current) => new Set(current).add(profile.id));
+    try {
+      const result = await window.codexProfileManager.closeProfile(profile.id, force);
+      showToast(result.action === "not_running"
+        ? languageText("该配置已退出。", "This profile has already exited.", "Профиль уже завершён.")
+        : languageText("已请求关闭，正在等待程序退出。", "Close requested. Waiting for the app to exit.", "Запрошено закрытие. Ожидание выхода из приложения."));
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : languageText("关闭失败。", "Failed to close profile.", "Не удалось закрыть профиль."));
+    } finally {
+      setBusyProfileIds((current) => { const next = new Set(current); next.delete(profile.id); return next; });
     }
   }
 
@@ -1259,7 +1317,7 @@ export function App() {
           ) : (
             <>
               {activeProfiles.map((profile) => (
-                <ProfileRow key={profile.id} profile={profile} selected={activeView === "profile" && selectedProfile?.id === profile.id} onSelect={() => { setActiveView("profile"); setSelectedProfileId(profile.id); }} />
+                <ProfileRow key={profile.id} profile={profile} runtime={runtimeByProfileId.get(profile.id)} t={t} selected={activeView === "profile" && selectedProfile?.id === profile.id} onSelect={() => { setActiveView("profile"); setSelectedProfileId(profile.id); }} />
               ))}
               {deletedProfiles.length > 0 ? (
                 <div className="profile-group-separator">
@@ -1267,7 +1325,7 @@ export function App() {
                 </div>
               ) : null}
               {deletedProfiles.map((profile) => (
-                <ProfileRow key={profile.id} profile={profile} selected={activeView === "profile" && selectedProfile?.id === profile.id} onSelect={() => { setActiveView("profile"); setSelectedProfileId(profile.id); }} />
+                <ProfileRow key={profile.id} profile={profile} runtime={runtimeByProfileId.get(profile.id)} t={t} selected={activeView === "profile" && selectedProfile?.id === profile.id} onSelect={() => { setActiveView("profile"); setSelectedProfileId(profile.id); }} />
               ))}
             </>
           )}
@@ -1349,7 +1407,7 @@ export function App() {
                 </div>
                 <div className="dashboard-summary-card">
                   <span className="status-kicker">{t.running}</span>
-                  <strong>{runtimeStatuses.filter((runtime) => runtime.status === "running").length}</strong>
+                  <strong>{runtimeStatuses.filter(isProfileRunning).length}</strong>
                 </div>
               </div>
               {activeProfiles.length === 0 ? (
@@ -1416,9 +1474,15 @@ export function App() {
                   <Trash2 size={15} />
                   {t.remove}
                 </button>
-                <button className="button primary" onClick={() => void openSelectedProfile()} type="button">
+                <RuntimeBadge runtime={selectedRuntime} t={t} />
+                {isProfileRunning(selectedRuntime) ? <button className="button secondary" disabled={selectedProfileBusy || selectedRuntime?.status === "closing"} onClick={() => void closeSelectedProfile()} type="button">
+                  <Square size={15} />
+                  {selectedRuntime?.status === "closing" ? t.runtimeClosing : t.closeProfile}
+                </button> : null}
+                {selectedRuntime?.canForceClose ? <button className="button danger" disabled={selectedProfileBusy} onClick={() => void closeSelectedProfile(true)} type="button">{t.forceStopProfile}</button> : null}
+                <button className="button primary" disabled={selectedProfileBusy || selectedRuntime?.status === "starting" || selectedRuntime?.status === "closing"} onClick={() => void openSelectedProfile()} type="button">
                   <Play size={15} />
-                  {t.open}
+                  {selectedRuntime?.status === "starting" ? t.runtimeStarting : isProfileRunning(selectedRuntime) ? t.openWindow : t.startProfile}
                 </button>
               </div>
             ) : null}
@@ -2809,8 +2873,12 @@ function ProviderTestBox({ providerTest, t }: { providerTest: ProviderTestResult
 
 function RuntimeBadge({ runtime, t }: { runtime?: ProfileRuntimeInfo; t: Record<string, string> }) {
   const status = runtime?.status ?? "unknown";
-  const label = status === "running" ? `${t.runtimeRunning}${runtime?.pid ? `：${runtime.pid}` : ""}` : status === "not_running" ? t.runtimeNotRunning : t.runtimeUnknown;
-  return <span className={`runtime-badge ${status}`}>{label}</span>;
+  const labels = { running: t.runtimeRunning, background: t.runtimeBackground, starting: t.runtimeStarting, closing: t.runtimeClosing, not_running: t.runtimeNotRunning, error: t.runtimeError, unknown: t.runtimeUnknown };
+  return <span className={`runtime-badge ${status}`} title={runtime?.detail}>{labels[status]}</span>;
+}
+
+function isProfileRunning(runtime?: ProfileRuntimeInfo): boolean {
+  return runtime?.status === "running" || runtime?.status === "background" || runtime?.status === "closing";
 }
 
 function ProfileColorMark({ color, size = "regular" }: { color: string; size?: "regular" | "large" }) {
@@ -2823,7 +2891,7 @@ function ProfileColorMark({ color, size = "regular" }: { color: string; size?: "
   );
 }
 
-function ProfileRow({ onSelect, profile, selected }: { onSelect: () => void; profile: ManagedProfile; selected: boolean }) {
+function ProfileRow({ onSelect, profile, runtime, selected, t }: { onSelect: () => void; profile: ManagedProfile; runtime?: ProfileRuntimeInfo; selected: boolean; t: Record<string, string> }) {
   const profileColor = getProfileColor(profile);
 
   return (
@@ -2837,7 +2905,7 @@ function ProfileRow({ onSelect, profile, selected }: { onSelect: () => void; pro
         <span className="profile-name">{profile.name}</span>
       </span>
       <span className="profile-meta">{profile.provider.displayName}{profile.provider.type === "third_party_responses" && profile.provider.model ? ` / ${profile.provider.model}` : ""}</span>
-      {profile.status === "deleted" ? <span className="runtime-badge deleted">Removed</span> : null}
+      {profile.status === "deleted" ? <span className="runtime-badge deleted">Removed</span> : <RuntimeBadge runtime={runtime} t={t} />}
     </button>
   );
 }
@@ -2898,8 +2966,8 @@ function sortProfilesByRuntime(profiles: ManagedProfile[], runtimeByProfileId: M
   return profiles
     .map((profile, index) => ({ profile, index }))
     .sort((left, right) => {
-      const leftRunning = runtimeByProfileId.get(left.profile.id)?.status === "running";
-      const rightRunning = runtimeByProfileId.get(right.profile.id)?.status === "running";
+      const leftRunning = isProfileRunning(runtimeByProfileId.get(left.profile.id));
+      const rightRunning = isProfileRunning(runtimeByProfileId.get(right.profile.id));
 
       if (leftRunning === rightRunning) {
         return left.index - right.index;

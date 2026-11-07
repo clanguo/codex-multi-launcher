@@ -40,6 +40,7 @@
     "verify:env-wizard": "npm run build && node scripts/verify-env-wizard.cjs && node scripts/verify-env-wizard.cjs --official-api",
     "verify:runtime": "npm run build:main && node scripts/verify-profile-runtime.mjs",
     "verify:runtime-native": "npm run build:main && node scripts/verify-profile-runtime-native.cjs",
+    "verify:runtime-ui": "npm run build && node scripts/verify-env-wizard.cjs --runtime",
     "verify:win-profile-create": "npm run build:main && node scripts/verify-windows-profile-create-smoke.mjs",
     "verify:win-session-sync": "npm run build:main && node scripts/verify-windows-session-sync.mjs",
     "verify:subscription-auth": "npm run build:main && node scripts/verify-subscription-auth.mjs",

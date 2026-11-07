@@ -75,6 +75,12 @@ The creation wizard includes a `.env` step. By default, it copies the entire `~/
 
 Unedited copies retain all variables, comments, blank lines, and line endings. The source file stays unchanged, and profile updates do not recopy it. Contents are stored only in the new `.env`, not in the profile registry.
 
+## Profile Runtime Controls
+
+Each profile shows its current runtime status. Use **Start** for a stopped profile, **Open window** to activate its existing instance, and **Close** to request a normal exit. If the app remains open after eight seconds, a separate **Force stop** action becomes available and asks for confirmation.
+
+Status changes are pushed to the UI. Checks run every three seconds while the manager is in the foreground and every fifteen seconds in the background, with immediate checks after launch/exit and a thirty-second discovery interval for externally started instances. Windows reuses one native PowerShell helper and checks cached process identities between discovery scans; macOS uses targeted `ps` queries and AppKit actions by PID. See [runtime implementation and verification](docs/runtime-management.md).
+
 ## Conversation History Sync
 
 When creating a profile, you can choose:

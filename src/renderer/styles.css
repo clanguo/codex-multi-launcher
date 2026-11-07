@@ -298,7 +298,8 @@ code {
   font-weight: 650;
 }
 
-.runtime-badge.running {
+.runtime-badge.running,
+.runtime-badge.background {
   color: #166534;
   background: #dcfce7;
 }
@@ -309,6 +310,8 @@ code {
 }
 
 .runtime-badge.unknown,
+.runtime-badge.starting,
+.runtime-badge.closing,
 .runtime-badge.error {
   color: #92400e;
   background: #fffbeb;
@@ -317,6 +320,10 @@ code {
 .runtime-badge.deleted {
   color: #b91c1c;
   background: #fee2e2;
+}
+
+.detail-actions .runtime-badge {
+  align-self: center;
 }
 
 .content {

@@ -33,6 +33,7 @@ const { app, BrowserWindow, ipcMain } = electron;
 app.disableHardwareAcceleration();
 app.on("window-all-closed", () => {});
 let win;
+let runtime;
 
 async function evaluate(expression) {
   return win.webContents.executeJavaScript(expression);
@@ -54,6 +55,9 @@ async function nextStep(step) {
 
 async function run() {
   const officialApi = process.argv.includes("--official-api");
+  const runtimeMode = process.argv.includes("--runtime");
+  let runtimeRows = [], launches = 0, environmentReads = 0;
+  const nativeActions = [];
   const testRoot = process.env.CODEX_ENV_WIZARD_TEST_ROOT;
   if (!testRoot) throw new Error("Run this verification script with Node.");
   process.env.CODEX_PROFILE_MANAGER_HOME_OVERRIDE = testRoot;
@@ -77,16 +81,57 @@ async function run() {
       "app:check-for-updates": { status: "up_to_date" },
       "environment:get": { codexAppPath, checks: [] },
       "profiles:runtime": [],
+      "profiles:runtime-snapshot": { revision: 0, profiles: [] },
       "profiles:backups": []
     };
-    for (const [channel, result] of Object.entries(responses)) ipcMain.handle(channel, () => result);
+    if (runtimeMode) {
+      const { ProfileRuntimeMonitor } = await import(pathToFileURL(path.resolve(__dirname, "../dist-electron/main/runtime-monitor.js")));
+      runtime = new ProfileRuntimeMonitor({ readProfiles: () => service.listProfiles(), platform: {
+        platform: "win32",
+        async scan() { return [...runtimeRows]; },
+        async inspect(known) { return runtimeRows.filter(row => known.some(previous => previous.pid === row.pid)); },
+        async act(row, action) {
+          nativeActions.push([row.pid, action]);
+          if (action !== "focus") runtimeRows = runtimeRows.filter(current => current.pid !== row.pid);
+          return { performed: true, hasWindow: true };
+        },
+        dispose() {}
+      } });
+      runtime.subscribe(snapshot => { if (win && !win.isDestroyed()) win.webContents.send("profiles:runtime-changed", snapshot); });
+      delete responses["profiles:runtime-snapshot"];
+      ipcMain.handle("profiles:runtime-snapshot", () => runtime.refresh(true));
+      ipcMain.handle("profiles:open", async (_event, id) => {
+        const profile = (await service.listProfiles()).find(profile => profile.id === id);
+        const result = await runtime.open(profile, async () => {
+          launches++;
+          runtimeRows.push({ pid: 7001, command: `"${codexAppPath}" --user-data-dir="${profile.paths.userDataDir}"`, executable: codexAppPath, startTime: "test-process", hasWindow: true });
+          return { pid: 7001 };
+        });
+        await runtime.refresh(true);
+        return result;
+      });
+      ipcMain.handle("profiles:close", async (_event, id, force) => {
+        const profile = (await service.listProfiles()).find(profile => profile.id === id);
+        const result = await runtime.close(profile, force);
+        await runtime.refresh(true);
+        return result;
+      });
+    }
+    for (const [channel, result] of Object.entries(responses)) ipcMain.handle(channel, () => {
+      if (channel === "environment:get") environmentReads++;
+      return result;
+    });
     ipcMain.handle("profiles:default-env", () => envFiles.getDefaultProfileEnvFile());
     ipcMain.handle("profiles:list", () => service.listProfiles());
-    ipcMain.handle("profiles:create", (_event, input) => service.createProfile({ ...input, codexAppPath }));
+    ipcMain.handle("profiles:create", async (_event, input) => {
+      const result = await service.createProfile({ ...input, codexAppPath });
+      if (runtime) await runtime.refresh(true);
+      return result;
+    });
     await app.whenReady();
     win = new BrowserWindow({
       show: false, width: 1180, height: 760,
-      webPreferences: { preload: path.resolve(__dirname, "../dist-electron/preload/index.cjs"), contextIsolation: true, nodeIntegration: false }
+      webPreferences: { preload: path.resolve(__dirname, "../dist-electron/preload/index.cjs"), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false }
     });
     await win.loadFile(path.resolve(__dirname, "../dist/index.html"));
     await evaluate('localStorage.setItem("codex-profile-manager-language", "en")');
@@ -124,6 +169,7 @@ async function run() {
     assert.equal(await evaluate('document.querySelector(".env-file-editor").value'), edited, "edits must survive navigation");
     const screenshotPath = process.argv.find((arg) => arg.startsWith("--screenshot="))?.slice("--screenshot=".length);
     if (screenshotPath) {
+      await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
       await fs.mkdir(path.dirname(path.resolve(screenshotPath)), { recursive: true });
       await fs.writeFile(path.resolve(screenshotPath), (await win.webContents.capturePage()).toPNG());
     }
@@ -145,8 +191,39 @@ async function run() {
     }
     assert.equal(await fs.readFile(path.join(profiles[0].paths.codexHome, ".env"), "utf8"), edited);
     assert.equal(await fs.readFile(defaultEnvPath, "utf8"), original);
+    if (runtimeMode) {
+      await waitFor('document.querySelector(".detail-actions .primary")?.textContent.trim() === "Start"');
+      const before = environmentReads;
+      await evaluate('document.querySelector(".detail-actions .primary").click()');
+      await waitFor('document.querySelector(".profile-row .runtime-badge.running") && document.querySelector(".detail-actions .primary")?.textContent.includes("Open window") && !document.querySelector(".detail-actions .primary").disabled');
+      assert.equal(launches, 1);
+      if (screenshotPath) {
+        await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+        await fs.writeFile(path.resolve(screenshotPath), (await win.webContents.capturePage()).toPNG());
+      }
+      await evaluate('document.querySelector(".detail-actions .primary").click()');
+      await waitFor('!document.querySelector(".detail-actions .primary").disabled');
+      assert.equal(launches, 1, "Open window must reuse the running instance");
+      assert.deepEqual(nativeActions.at(-1), [7001, "focus"]);
+      await evaluate('document.querySelector(".detail-actions .secondary").click()');
+      await waitFor('document.querySelector(".profile-row .runtime-badge.not_running") && document.querySelector(".detail-actions .primary")?.textContent.trim() === "Start"');
+      assert.deepEqual(nativeActions.at(-1), [7001, "close"]);
+      runtimeRows = [{ pid: 7002, command: `"${codexAppPath}" --user-data-dir="${profiles[0].paths.userDataDir}"`, executable: codexAppPath, startTime: "external-process", hasWindow: true }];
+      await runtime.refresh(true);
+      await waitFor('document.querySelector(".profile-row .runtime-badge.running")');
+      runtimeRows = [];
+      await runtime.refresh();
+      await waitFor('document.querySelector(".profile-row .runtime-badge.not_running")');
+      const stale = { ...runtime.getSnapshot(), revision: 0, profiles: runtime.getSnapshot().profiles.map(row => ({ ...row, status: "running" })) };
+      win.webContents.send("profiles:runtime-changed", stale);
+      await evaluate('new Promise(resolve => setTimeout(resolve, 30))');
+      assert.equal(await evaluate('Boolean(document.querySelector(".profile-row .runtime-badge.running"))'), false, "stale events must not overwrite a newer state");
+      assert.equal(environmentReads, before, "runtime events must not rerun environment diagnostics");
+      console.log("Runtime UI verification passed (IPC events, state badges, start/focus/close buttons, external exit, stale snapshots).");
+    }
     console.log(`Profile .env wizard verification passed (${officialApi ? "official API" : "account"}, no model preset, editing, navigation, generation, source isolation).`);
   } finally {
+    runtime?.dispose();
     if (win && !win.isDestroyed()) win.destroy();
   }
 }
