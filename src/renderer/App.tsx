@@ -40,6 +40,7 @@ import type {
   AnnouncementItem,
   ManagedProfile,
   ProfileRuntimeInfo,
+  ProfileCliInfo,
   RuntimeSnapshot,
   ProviderModelsResult,
   ProviderTestResult,
@@ -112,6 +113,16 @@ const TEXT: Record<Language, Record<string, string>> = {
     checking: "检查中",
     selectedProfile: "当前配置",
     revealFiles: "显示文件",
+    profileCliTitle: "独立 Codex CLI",
+    profileCliDescription: "将此命令填入 Multica 等平台，可使用当前 profile 的配置、认证和 .env。",
+    copyCliCommand: "复制命令",
+    copyCliPath: "复制可执行路径",
+    registerCliPath: "重新注册 PATH",
+    cliPathNote: "命令已加入用户 PATH。首次生成后，请重新打开终端并重启外部平台或 daemon。",
+    cliPathEntry: "命令目录 / PATH",
+    cliMissing: "未检测到基础 Codex CLI。请安装 CLI，或在此 profile 的 .env 中设置 CODEX_PROFILE_CLI_PATH。",
+    cliCopied: "已复制",
+    cliRegistering: "注册中…",
     restore: "恢复",
     deletePermanently: "彻底删除",
     remove: "移除",
@@ -353,6 +364,16 @@ const TEXT: Record<Language, Record<string, string>> = {
     checking: "Checking",
     selectedProfile: "Selected Profile",
     revealFiles: "Reveal Files",
+    profileCliTitle: "Profile Codex CLI",
+    profileCliDescription: "Use this command in Multica or another platform to bind this profile's config, authentication, and .env.",
+    copyCliCommand: "Copy command",
+    copyCliPath: "Copy executable path",
+    registerCliPath: "Register PATH again",
+    cliPathNote: "The command directory is in your user PATH. Reopen terminals and restart the external app or daemon after first setup.",
+    cliPathEntry: "Command directory / PATH",
+    cliMissing: "Base Codex CLI was not detected. Install it, or set CODEX_PROFILE_CLI_PATH in this profile's .env.",
+    cliCopied: "Copied",
+    cliRegistering: "Registering…",
     restore: "Restore",
     deletePermanently: "Delete Permanently",
     remove: "Remove",
@@ -587,6 +608,10 @@ export function App() {
   const [busyProfileIds, setBusyProfileIds] = useState<Set<string>>(() => new Set());
   const [showDeletedProfiles, setShowDeletedProfiles] = useState(false);
   const [configBackups, setConfigBackups] = useState<ConfigBackupInfo[]>([]);
+  const [cliInfo, setCliInfo] = useState<ProfileCliInfo | null>(null);
+  const [cliError, setCliError] = useState<string | null>(null);
+  const [isRegisteringCli, setIsRegisteringCli] = useState(false);
+  const selectedCliProfile = useRef<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [wizardStep, setWizardStep] = useState<WizardStep>("profile");
   const [subscriptionAuthorization, setSubscriptionAuthorization] = useState<SubscriptionAuthorizationSession | null>(null);
@@ -643,6 +668,7 @@ export function App() {
     [selectedProfileId, visibleProfiles]
   );
   const selectedRuntime = selectedProfile ? runtimeByProfileId.get(selectedProfile.id) : undefined;
+  selectedCliProfile.current = selectedProfile?.id ?? null;
   const selectedProfileBusy = Boolean(selectedProfile && busyProfileIds.has(selectedProfile.id));
 
   const currentStepIndex = WIZARD_STEPS.findIndex((step) => step === wizardStep);
@@ -764,6 +790,35 @@ export function App() {
     setEditProviderModels(null);
     void window.codexProfileManager.listConfigBackups(selectedProfile.id).then(setConfigBackups);
   }, [selectedProfile]);
+
+  useEffect(() => {
+    let active = true;
+    setCliInfo(null);
+    setCliError(null);
+    if (selectedProfile) void window.codexProfileManager.getProfileCliInfo(selectedProfile.id)
+      .then((info) => { if (active) setCliInfo(info); })
+      .catch((error) => { if (active) setCliError(error instanceof Error ? error.message : "Could not generate this profile's CLI command."); });
+    return () => { active = false; };
+  }, [selectedProfile]);
+
+  async function registerSelectedCliPath() {
+    if (!selectedProfile) return;
+    const id = selectedProfile.id;
+    setIsRegisteringCli(true);
+    try {
+      const info = await window.codexProfileManager.getProfileCliInfo(id, true);
+      if (selectedCliProfile.current !== id) return;
+      setCliInfo(info);
+      setCliError(null);
+      showToast(info.pathError || t.cliPathNote);
+    } catch (error) { if (selectedCliProfile.current === id) setCliError(error instanceof Error ? error.message : "Could not register CLI commands."); }
+    finally { setIsRegisteringCli(false); }
+  }
+
+  async function copyCliValue(value: string) {
+    try { await navigator.clipboard.writeText(value); showToast(t.cliCopied); }
+    catch (error) { showToast(error instanceof Error ? error.message : "Could not copy the CLI command."); }
+  }
 
   useEffect(() => {
     if (form.authMode !== "subscription" || !subscriptionAuthorization || ["authorized", "denied", "expired", "error"].includes(subscriptionStatus?.state ?? "")) {
@@ -1573,6 +1628,19 @@ export function App() {
                   <ProviderTestBox providerTest={editProviderTest} t={t} />
                 </div>
               )}
+              <section className="profile-cli-box">
+                <h4>{t.profileCliTitle}</h4>
+                <p className="field-note">{t.profileCliDescription}</p>
+                <div className="profile-cli-command">
+                  <code>{cliInfo?.command ?? `codex-${selectedProfile.id}`}</code>
+                  <button className="button secondary compact" onClick={() => void copyCliValue(cliInfo?.command ?? `codex-${selectedProfile.id}`)} type="button"><Copy size={14} />{t.copyCliCommand}</button>
+                  <button className="button secondary compact" onClick={() => void copyCliValue(cliInfo?.executablePath ?? selectedProfile.paths.cliLauncherPath)} type="button">{t.copyCliPath}</button>
+                </div>
+                {cliInfo ? <PathRow label={t.cliPathEntry} value={cliInfo.pathEntry} onReveal={() => void revealPath(cliInfo.pathEntry)} /> : null}
+                <p className={`field-note ${cliInfo?.pathError || cliError ? "danger" : ""}`}>{cliError || cliInfo?.pathError || t.cliPathNote}</p>
+                {cliInfo && !cliInfo.cliExecutablePath ? <p className="field-note warn">{t.cliMissing}</p> : null}
+                <button className="button secondary compact" disabled={isRegisteringCli} onClick={() => void registerSelectedCliPath()} type="button"><RefreshCcw size={14} />{isRegisteringCli ? t.cliRegistering : t.registerCliPath}</button>
+              </section>
               <details className="advanced-details">
                 <summary>
                   <span className="advanced-summary-icon"><ChevronRight size={15} /></span>
@@ -1586,6 +1654,7 @@ export function App() {
                     <PathRow icon={<Folder size={15} />} label="CODEX_HOME" onReveal={() => void revealPath(selectedProfile.paths.codexHome)} value={selectedProfile.paths.codexHome} />
                     <PathRow icon={<Folder size={15} />} label="user-data-dir" onReveal={() => void revealPath(selectedProfile.paths.userDataDir)} value={selectedProfile.paths.userDataDir} />
                     <PathRow icon={<Folder size={15} />} label="Launcher" onReveal={() => void revealPath(selectedProfile.paths.launcherPath)} value={selectedProfile.paths.launcherPath} />
+                    <PathRow icon={<FileText size={15} />} label="Codex CLI" onReveal={() => void revealPath(selectedProfile.paths.cliLauncherPath)} value={selectedProfile.paths.cliLauncherPath} />
                     <PathRow label="Provider" value={`${selectedProfile.provider.displayName} (${selectedProfile.provider.wireApi})`} />
                     <PathRow label="Base URL" value={selectedProfile.provider.baseUrl ?? "Official OpenAI"} />
                     <PathRow label="Env key" value={selectedProfile.provider.envKeyName} />

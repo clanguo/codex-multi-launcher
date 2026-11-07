@@ -326,6 +326,29 @@ code {
   align-self: center;
 }
 
+.profile-cli-box {
+  border-top: 1px solid #e8edf4;
+  padding: 16px 0;
+}
+
+.profile-cli-command {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.profile-cli-command code {
+  flex: 1;
+  min-width: 150px;
+  padding: 9px 12px;
+  border: 1px solid #d8e3f2;
+  border-radius: 8px;
+  background: #f5f8fd;
+  overflow-wrap: anywhere;
+}
+
 .content {
   overflow: auto;
   min-width: 0;

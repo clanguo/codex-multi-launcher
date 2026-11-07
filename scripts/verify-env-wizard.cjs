@@ -56,7 +56,7 @@ async function nextStep(step) {
 async function run() {
   const officialApi = process.argv.includes("--official-api");
   const runtimeMode = process.argv.includes("--runtime");
-  let runtimeRows = [], launches = 0, environmentReads = 0;
+  let runtimeRows = [], launches = 0, environmentReads = 0, cliRegistrations = 0;
   const nativeActions = [];
   const testRoot = process.env.CODEX_ENV_WIZARD_TEST_ROOT;
   if (!testRoot) throw new Error("Run this verification script with Node.");
@@ -123,6 +123,7 @@ async function run() {
     });
     ipcMain.handle("profiles:default-env", () => envFiles.getDefaultProfileEnvFile());
     ipcMain.handle("profiles:list", () => service.listProfiles());
+    ipcMain.handle("profiles:cli-info", (_event, id, refreshPath) => { if (refreshPath) cliRegistrations++; return service.getProfileCliInfo(id, refreshPath); });
     ipcMain.handle("profiles:create", async (_event, input) => {
       const result = await service.createProfile({ ...input, codexAppPath });
       if (runtime) await runtime.refresh(true);
@@ -191,6 +192,22 @@ async function run() {
     }
     assert.equal(await fs.readFile(path.join(profiles[0].paths.codexHome, ".env"), "utf8"), edited);
     assert.equal(await fs.readFile(defaultEnvPath, "utf8"), original);
+    await waitFor('document.querySelector(".profile-cli-box .path-row")');
+    assert.equal(await evaluate('document.querySelector(".profile-cli-command code").textContent'), `codex-${profiles[0].id}`);
+    await evaluate('window.__copiedCliValues = []; Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async value => { window.__copiedCliValues.push(value); } } })');
+    await evaluate('document.querySelectorAll(".profile-cli-command button")[0].click(); document.querySelectorAll(".profile-cli-command button")[1].click()');
+    await waitFor('window.__copiedCliValues.length === 2');
+    assert.deepEqual(await evaluate('window.__copiedCliValues'), [`codex-${profiles[0].id}`, profiles[0].paths.cliLauncherPath]);
+    await evaluate('document.querySelector(".profile-cli-box > button").click()');
+    await waitFor('!document.querySelector(".profile-cli-box > button").disabled');
+    assert.equal(cliRegistrations, 1, "PATH action must request backend re-registration");
+    const cliScreenshot = process.argv.find(arg => arg.startsWith("--cli-screenshot="))?.slice("--cli-screenshot=".length);
+    if (cliScreenshot) {
+      await evaluate('document.querySelector(".profile-cli-box").scrollIntoView({block:"center"}); new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+      await fs.mkdir(path.dirname(path.resolve(cliScreenshot)), { recursive: true });
+      await fs.writeFile(path.resolve(cliScreenshot), (await win.webContents.capturePage()).toPNG());
+    }
+    console.log("Profile CLI UI verification passed (command, copy command/path, PATH re-registration).");
     if (runtimeMode) {
       await waitFor('document.querySelector(".detail-actions .primary")?.textContent.trim() === "Start"');
       const before = environmentReads;
