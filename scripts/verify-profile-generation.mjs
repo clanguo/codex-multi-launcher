@@ -522,7 +522,7 @@ const [officialConfigRaw, officialAuthRaw, officialLauncherRaw] = await Promise.
 const officialStoredKey = await getApiKey(officialResult.profile.id, officialResult.profile.provider.id);
 
 assert(officialResult.profile.provider.envKeyName === "OPENAI_API_KEY", "official profile should use OPENAI_API_KEY");
-assert(officialConfigRaw.includes('model = "gpt-5.2"'), "official config should contain model");
+assert(!officialConfigRaw.includes("model ="), "official config should not preset a model");
 assert(!officialConfigRaw.includes("model_provider"), "official config should not select custom provider");
 assert(!officialConfigRaw.includes("[model_providers."), "official config should not write custom provider block");
 assert(officialLauncherRaw.includes("--open-profile"), "official launcher should delegate profile opening back to the manager");
@@ -561,7 +561,7 @@ const accountStoredKey = await getApiKey(accountResult.profile.id, accountResult
 
 assert(accountResult.profile.auth.mode === "chatgpt_account", "account profile should persist account auth mode");
 assert(accountResult.profile.provider.envKeyName === "OPENAI_API_KEY", "account profile should keep official provider metadata");
-assert(accountConfigRaw.includes('model = "gpt-5.2"'), "account profile should still write basic model config");
+assert(!accountConfigRaw.includes("model ="), "account profile should not preset a model");
 assert(!(await fileExists(accountAuthPath)), "account profile should not bootstrap API key auth.json");
 assert(accountStoredKey === null, "account profile should not store an API key");
 assert(!accountLauncherRaw.includes("API_KEY="), "account launcher should not decrypt an API key");

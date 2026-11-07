@@ -201,6 +201,23 @@ export async function testProvider(input: ProviderTestInput): Promise<ProviderTe
         httpStatus: modelsResponse.status
       });
     }
+    if (!input.model?.trim()) {
+      if (!modelsResponse.ok) {
+        return errorResult("unknown_error", "Models API test failed", `The /models endpoint returned HTTP ${modelsResponse.status}.`, {
+          testedModelsEndpoint: true,
+          httpStatus: modelsResponse.status
+        });
+      }
+      return {
+        status: "passed",
+        ok: true,
+        summary: "Models API is available",
+        details: "Connection and API key verified. Choose a model in the app after opening the profile.",
+        testedModelsEndpoint: true,
+        testedResponsesEndpoint: false,
+        httpStatus: modelsResponse.status
+      };
+    }
   } catch (error) {
     return errorResult("unreachable", "Provider unreachable", error instanceof Error ? error.message : "Could not connect to the provider.", {
       testedModelsEndpoint: true

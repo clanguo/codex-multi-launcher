@@ -53,7 +53,7 @@ export interface ProviderConfig {
   baseUrl?: string;
   wireApi: "responses";
   envKeyName: string;
-  model: string;
+  model?: string;
   reasoningEffort: "low" | "medium" | "high" | "xhigh";
 }
 
@@ -118,7 +118,7 @@ export interface DiagnosticsReport {
       type: ProviderType;
       displayName: string;
       baseUrl?: string;
-      model: string;
+      model?: string;
       envKeyName: string;
     };
     paths: ProfilePaths;
@@ -170,7 +170,7 @@ export interface CreateProfileInput {
     type: ProviderType;
     displayName: string;
     baseUrl?: string;
-    model: string;
+    model?: string;
     apiKey?: string;
     reasoningEffort?: ProviderConfig["reasoningEffort"];
   };
@@ -201,7 +201,7 @@ export interface UpdateProfileInput {
   provider: {
     displayName: string;
     baseUrl?: string;
-    model: string;
+    model?: string;
     apiKey?: string;
     reasoningEffort?: ProviderConfig["reasoningEffort"];
   };
@@ -232,14 +232,14 @@ export interface RestoreConfigBackupResult {
 export interface ProviderTestInput {
   baseUrl: string;
   apiKey: string;
-  model: string;
+  model?: string;
 }
 
 export interface ProfileProviderTestInput {
   profileId: string;
   baseUrl?: string;
   apiKey?: string;
-  model: string;
+  model?: string;
 }
 
 export interface ProviderModelOption {

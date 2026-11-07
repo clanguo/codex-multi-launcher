@@ -200,6 +200,7 @@ const TEXT: Record<Language, Record<string, string>> = {
     providerName: "服务名称",
     baseUrl: "接口地址",
     model: "使用模型",
+    officialModelsAutomatic: "在 App 中选择官方模型",
     fetchModels: "获取模型列表",
     fetchingModels: "获取中",
     modelsFound: "可选模型",
@@ -431,6 +432,7 @@ const TEXT: Record<Language, Record<string, string>> = {
     providerName: "Provider name",
     baseUrl: "Base URL",
     model: "Model",
+    officialModelsAutomatic: "Choose an official model in the app",
     fetchModels: "Fetch Models",
     fetchingModels: "Fetching",
     modelsFound: "Available Models",
@@ -721,7 +723,7 @@ export function App() {
     setEditForm({
       providerName: selectedProfile.provider.displayName,
       baseUrl: selectedProfile.provider.baseUrl ?? "",
-      model: selectedProfile.provider.model,
+      model: selectedProfile.provider.model ?? "",
       apiKey: "",
       iconBackgroundColor: getProfileColor(selectedProfile)
     });
@@ -841,7 +843,7 @@ export function App() {
           type: form.authMode === "chatgpt_account" ? "official_openai" : form.providerType,
           displayName: form.authMode === "chatgpt_account" ? "ChatGPT Account" : form.authMode === "subscription" ? "Subscription service" : form.providerName,
           baseUrl: form.authMode === "api_key" && form.providerType === "third_party_responses" ? form.baseUrl : undefined,
-          model: form.model,
+          model: form.authMode === "chatgpt_account" || form.providerType === "official_openai" ? undefined : form.model,
           apiKey: form.authMode === "api_key" ? form.apiKey : undefined,
           reasoningEffort: "medium"
         }
@@ -909,7 +911,7 @@ export function App() {
       const result = await window.codexProfileManager.testProvider({
         baseUrl: form.providerType === "third_party_responses" ? form.baseUrl : "https://api.openai.com/v1",
         apiKey: form.apiKey,
-        model: form.model
+        model: form.providerType === "official_openai" ? undefined : form.model
       });
       setProviderTest(result);
     } catch (error) {
@@ -961,7 +963,7 @@ export function App() {
         profileId: selectedProfile.id,
         baseUrl: editForm.baseUrl,
         apiKey: editForm.apiKey || undefined,
-        model: editForm.model
+        model: selectedProfile.provider.type === "official_openai" ? undefined : editForm.model
       });
       setEditProviderTest(result);
     } catch (error) {
@@ -1068,7 +1070,7 @@ export function App() {
         provider: {
           displayName: editForm.providerName,
           baseUrl: editForm.baseUrl,
-          model: editForm.model,
+          model: selectedProfile.provider.type === "official_openai" ? undefined : editForm.model,
           apiKey: editForm.apiKey || undefined
         }
       });
@@ -1467,36 +1469,40 @@ export function App() {
                     {t.providerName}
                     <input value={editForm.providerName} onChange={(event) => setEditForm({ ...editForm, providerName: event.target.value })} />
                   </label>
-                  <label>
-                    {t.baseUrl}
-                    <input value={editForm.baseUrl} onChange={(event) => setEditForm({ ...editForm, baseUrl: event.target.value })} />
-                  </label>
-                  <label>
-                    {t.model}
-                    <div className="input-action-row">
-                      <input value={editForm.model} onChange={(event) => setEditForm({ ...editForm, model: event.target.value })} />
-                      <button className="button secondary compact" disabled={isFetchingEditProviderModels || !editForm.baseUrl} onClick={() => void fetchEditProviderModels()} type="button">
-                        <RefreshCcw size={14} />
-                        {isFetchingEditProviderModels ? t.fetchingModels : t.fetchModels}
-                      </button>
-                    </div>
-                  </label>
-                  <ModelPicker
-                    modelsResult={editProviderModels}
-                    selectedModel={editForm.model}
-                    t={t}
-                    onSelect={(model) => setEditForm((current) => ({ ...current, model }))}
-                  />
+                  {selectedProfile.provider.type === "third_party_responses" ? (
+                    <>
+                      <label>
+                        {t.baseUrl}
+                        <input value={editForm.baseUrl} onChange={(event) => setEditForm({ ...editForm, baseUrl: event.target.value })} />
+                      </label>
+                      <label>
+                        {t.model}
+                        <div className="input-action-row">
+                          <input value={editForm.model} onChange={(event) => setEditForm({ ...editForm, model: event.target.value })} />
+                          <button className="button secondary compact" disabled={isFetchingEditProviderModels || !editForm.baseUrl} onClick={() => void fetchEditProviderModels()} type="button">
+                            <RefreshCcw size={14} />
+                            {isFetchingEditProviderModels ? t.fetchingModels : t.fetchModels}
+                          </button>
+                        </div>
+                      </label>
+                      <ModelPicker
+                        modelsResult={editProviderModels}
+                        selectedModel={editForm.model}
+                        t={t}
+                        onSelect={(model) => setEditForm((current) => ({ ...current, model }))}
+                      />
+                    </>
+                  ) : <p className="field-note">{t.officialModelsAutomatic}</p>}
                   <label>
                     {t.newApiKey}
                     <input placeholder={t.keepCurrentKey} type="password" value={editForm.apiKey} onChange={(event) => setEditForm({ ...editForm, apiKey: event.target.value })} />
                   </label>
                   <div className="button-row">
-                    <button className="button secondary" disabled={isTestingEditProvider || !editForm.baseUrl || !editForm.model} onClick={() => void testEditProvider()} type="button">
+                    <button className="button secondary" disabled={isTestingEditProvider || (selectedProfile.provider.type === "third_party_responses" && (!editForm.baseUrl || !editForm.model))} onClick={() => void testEditProvider()} type="button">
                       <TestTube2 size={15} />
                       {isTestingEditProvider ? t.testing : t.test}
                     </button>
-                    <button className="button secondary" disabled={isUpdatingProfile || !editForm.providerName || !editForm.baseUrl || !editForm.model} onClick={() => void saveSelectedProfile()} type="button">
+                    <button className="button secondary" disabled={isUpdatingProfile || !editForm.providerName || (selectedProfile.provider.type === "third_party_responses" && (!editForm.baseUrl || !editForm.model))} onClick={() => void saveSelectedProfile()} type="button">
                       {isUpdatingProfile ? t.saving : t.saveProvider}
                     </button>
                   </div>
@@ -2408,22 +2414,26 @@ function WizardBody({
                 <input value={form.baseUrl} onChange={(event) => onChange({ ...form, baseUrl: event.target.value })} />
               </label>
             ) : null}
-            <label>
-              {t.model}
-              <div className="input-action-row">
-                <input value={form.model} onChange={(event) => onChange({ ...form, model: event.target.value })} />
-                <button className="button secondary compact" disabled={isFetchingProviderModels || (form.providerType === "third_party_responses" && !form.baseUrl) || !form.apiKey} onClick={onFetchModels} type="button">
-                  <RefreshCcw size={14} />
-                  {isFetchingProviderModels ? t.fetchingModels : t.fetchModels}
-                </button>
-              </div>
-            </label>
-            <ModelPicker
-              modelsResult={providerModels}
-              selectedModel={form.model}
-              t={t}
-              onSelect={(model) => onChange({ ...form, model })}
-            />
+            {form.providerType === "third_party_responses" ? (
+              <>
+                <label>
+                  {t.model}
+                  <div className="input-action-row">
+                    <input value={form.model} onChange={(event) => onChange({ ...form, model: event.target.value })} />
+                    <button className="button secondary compact" disabled={isFetchingProviderModels || (form.providerType === "third_party_responses" && !form.baseUrl) || !form.apiKey} onClick={onFetchModels} type="button">
+                      <RefreshCcw size={14} />
+                      {isFetchingProviderModels ? t.fetchingModels : t.fetchModels}
+                    </button>
+                  </div>
+                </label>
+                <ModelPicker
+                  modelsResult={providerModels}
+                  selectedModel={form.model}
+                  t={t}
+                  onSelect={(model) => onChange({ ...form, model })}
+                />
+              </>
+            ) : <p className="field-note">{t.officialModelsAutomatic}</p>}
             <label>
               {t.apiKey}
               <input type="password" value={form.apiKey} onChange={(event) => onChange({ ...form, apiKey: event.target.value })} />
@@ -2463,7 +2473,7 @@ function WizardBody({
     return (
       <div className="form">
         <p className="field-note">{t.testNote}</p>
-        <button className="button secondary full-width" disabled={isTestingProvider || (form.providerType === "third_party_responses" && !form.baseUrl) || !form.apiKey || !form.model} onClick={onTestProvider} type="button">
+        <button className="button secondary full-width" disabled={isTestingProvider || (form.providerType === "third_party_responses" && (!form.baseUrl || !form.model)) || !form.apiKey} onClick={onTestProvider} type="button">
           <TestTube2 size={16} />
           {isTestingProvider ? t.testing : t.testProvider}
         </button>
@@ -2519,7 +2529,7 @@ function WizardBody({
           <PathRow label={t.provider} value={form.providerName || t.missing} />
           <PathRow label={t.providerTypeReview} value={form.providerType === "official_openai" ? t.officialOpenAI : t.thirdPartyResponses} />
           <PathRow label={t.baseUrl} value={form.providerType === "third_party_responses" ? form.baseUrl || t.missing : "https://api.openai.com/v1"} />
-          <PathRow label={t.model} value={form.model || t.missing} />
+          <PathRow label={t.model} value={form.providerType === "official_openai" ? t.officialModelsAutomatic : form.model || t.missing} />
         </>
       ) : null}
       <PathRow label={t.codexAppPath} value={form.codexAppPath || t.codexAppPlaceholder} />
@@ -2826,7 +2836,7 @@ function ProfileRow({ onSelect, profile, selected }: { onSelect: () => void; pro
         <ProfileColorMark color={profileColor} />
         <span className="profile-name">{profile.name}</span>
       </span>
-      <span className="profile-meta">{profile.provider.displayName} / {profile.provider.model}</span>
+      <span className="profile-meta">{profile.provider.displayName}{profile.provider.type === "third_party_responses" && profile.provider.model ? ` / ${profile.provider.model}` : ""}</span>
       {profile.status === "deleted" ? <span className="runtime-badge deleted">Removed</span> : null}
     </button>
   );
@@ -2943,7 +2953,7 @@ function isCurrentStepValid(step: WizardStep, form: typeof DEFAULT_FORM, subscri
   if (step === "provider") return Boolean(
     form.providerName.trim()
     && (form.providerType === "official_openai" || form.baseUrl.trim())
-    && form.model.trim()
+    && (form.providerType === "official_openai" || form.model.trim())
     && form.apiKey.trim()
   );
   return true;

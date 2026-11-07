@@ -248,7 +248,7 @@ export async function testProfileProvider(input: ProfileProviderTestInput): Prom
   return testProvider({
     baseUrl: profile.provider.type === "third_party_responses" ? input.baseUrl ?? profile.provider.baseUrl ?? "" : "https://api.openai.com/v1",
     apiKey,
-    model: input.model
+    model: profile.provider.type === "official_openai" ? undefined : input.model
   });
 }
 

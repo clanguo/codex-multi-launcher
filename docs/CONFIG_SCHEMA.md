@@ -111,16 +111,15 @@ Rules:
 
 ### official_openai
 
-Used when the user wants a separate official OpenAI API key profile.
+Used for official ChatGPT account login and separate official OpenAI API key profiles.
 
 Expected generated Codex config:
 
 ```toml
-model = "gpt-5.2"
-model_reasoning_effort = "medium"
+# No model or reasoning-effort preset. Choose the model in the app.
 ```
 
-The API key is injected through `OPENAI_API_KEY` at launch time.
+The model field is omitted from official profile records. Creation clears inherited model defaults; updates and launches preserve model choices made in the app and remove old manager-owned presets. API key profiles bootstrap their key through `auth.json` and launch environment variables. Account profiles leave login credentials to the app.
 
 ### third_party_responses
 

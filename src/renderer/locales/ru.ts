@@ -138,6 +138,7 @@ export const RU_TEXT: Record<string, string> = {
   providerName: "Название сервиса",
   baseUrl: "Адрес сервиса",
   model: "Модель",
+  officialModelsAutomatic: "Выберите официальную модель в приложении",
   fetchModels: "Получить список моделей",
   fetchingModels: "Получение...",
   modelsFound: "Доступные модели",

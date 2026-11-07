@@ -63,6 +63,8 @@ When inheriting settings, official OpenAI profiles (account login or API key) ke
 
 Supports the official OpenAI API and third-party endpoints that implement the Responses API. Compatibility depends on the provider's actual API behavior; a Chat Completions-only endpoint may not work with Codex Desktop.
 
+Official account and OpenAI API key profiles do not preset a model or reasoning effort. Choose a model in the app; later manager updates and launches preserve that choice. Third-party providers still require a model. Official API connection tests check `/models` without selecting a model or sending a generation request.
+
 ### Subscription service
 
 Creates a ready-to-use profile after the user completes browser-based registration, purchase, and device authorization. No Base URL or API key needs to be entered manually. See the [step-by-step guide](https://jqymodi.github.io/codex-multi-launcher/subscription.html).

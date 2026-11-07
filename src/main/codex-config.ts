@@ -63,8 +63,9 @@ function tomlString(value: string): string {
 }
 
 function renderConfig(profile: ManagedProfile): string {
+  if (profile.provider.type === "official_openai") return "";
   const lines: string[] = [
-    `model = ${tomlString(profile.provider.model)}`,
+    `model = ${tomlString(profile.provider.model ?? "")}`,
     `model_reasoning_effort = ${tomlString(profile.provider.reasoningEffort)}`,
     ""
   ];
@@ -87,9 +88,10 @@ function renderConfig(profile: ManagedProfile): string {
 }
 
 function renderRootConfig(profile: ManagedProfile): string {
+  if (profile.provider.type === "official_openai") return "";
   const lines = [
     ...(profile.provider.type === "third_party_responses" ? [`model_provider = ${tomlString(profile.provider.id)}`] : []),
-    `model = ${tomlString(profile.provider.model)}`,
+    `model = ${tomlString(profile.provider.model ?? "")}`,
     `model_reasoning_effort = ${tomlString(profile.provider.reasoningEffort)}`
   ];
   return lines.join("\n");
@@ -889,6 +891,7 @@ function isSafeGlobalWorkspaceRoot(value: string): boolean {
 }
 
 function renderManagedConfig(profile: ManagedProfile): string {
+  if (profile.provider.type === "official_openai") return "";
   const body = [
     "# --- Codex Profile Manager managed settings ---",
     "# These settings are managed so this profile can override inherited defaults.",
@@ -950,7 +953,7 @@ function isTomlTable(value: TomlValue | undefined): value is TomlTable {
   return value !== null && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date);
 }
 
-function removeOfficialProviderOverrides(config: string): string {
+function removeOfficialProviderOverrides(config: string, preserveAppModel: boolean): string {
   // Provider and login settings belong to this profile. Inheriting an endpoint,
   // a forced API login, or a selected TOML profile can override official login.
   // Parse TOML so CRLF, quoted keys, inline tables and nested providers work alike.
@@ -967,6 +970,12 @@ function removeOfficialProviderOverrides(config: string): string {
         tables.push(namedProfile);
       }
     }
+  }
+
+  // New profiles must not inherit a model preset. Existing App selections are
+  // retained unless they came with provider/auth overrides being removed.
+  if (!preserveAppModel || tables.some((table) => overrideKeys.some((key) => Object.hasOwn(table, key)))) {
+    overrideKeys.push("model", "model_reasoning_effort");
   }
 
   let changed = false;
@@ -1004,14 +1013,16 @@ function normalizeProfileSpecificConfig(config: string, profile: ManagedProfile)
     .replace(/^SKY_CUA_SERVICE_PATH = .+$/m, `SKY_CUA_SERVICE_PATH = ${tomlString(computerUseServicePath)}`);
 }
 
-function mergeManagedConfig(config: string, profile: ManagedProfile): string {
+function mergeManagedConfig(config: string, profile: ManagedProfile, preserveAppModel = false): string {
   const unmanagedConfig = stripManagedConfig(config.replace(/\r\n/g, "\n"));
   const providerConfig = profile.provider.type === "official_openai"
-    ? removeOfficialProviderOverrides(unmanagedConfig)
+    ? removeOfficialProviderOverrides(unmanagedConfig, preserveAppModel)
     : removeProviderOverride(unmanagedConfig, profile.provider.id);
-  const cleanedConfig = rewriteInheritedProfilePaths(removeInheritedRootOverrides(providerConfig), profile);
+  const cleanedConfig = rewriteInheritedProfilePaths(profile.provider.type === "official_openai" ? providerConfig : removeInheritedRootOverrides(providerConfig), profile);
   const firstTableIndex = cleanedConfig.search(/^\s*\[[^\]]+\]/m);
   const managedConfig = renderManagedConfig(profile).trim();
+
+  if (!managedConfig) return cleanedConfig.trimEnd() ? `${cleanedConfig.trimEnd()}\n` : "";
 
   if (firstTableIndex === -1) {
     const rootConfig = cleanedConfig.trimEnd();
@@ -1088,7 +1099,7 @@ export async function writeCodexConfig(profile: ManagedProfile, options: { inher
 
   if (options.preserveExistingConfig && await pathExists(configPath)) {
     const existingConfig = await fs.readFile(configPath, "utf8");
-    const mergedConfig = mergeManagedConfig(existingConfig, profile);
+    const mergedConfig = mergeManagedConfig(existingConfig, profile, true);
     await fs.writeFile(configPath, mergedConfig, { mode: 0o600 });
     await copyReferencedConfigArtifacts(mergedConfig, getDefaultCodexHome(), profile.paths.codexHome);
     return configPath;

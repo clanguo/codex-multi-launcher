@@ -3,9 +3,35 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const { app, BrowserWindow, ipcMain } = require("electron");
+const electron = require("electron");
+const { parse } = require("smol-toml");
+
+if (typeof electron === "string") {
+  // Chromium releases its user-data files only after Electron exits.
+  // Keep cleanup in the Node parent so Windows file locks cannot hide failures.
+  (async () => {
+    const testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "codex-env-wizard-"));
+    const childEnv = { ...process.env, CODEX_ENV_WIZARD_TEST_ROOT: testRoot };
+    delete childEnv.ELECTRON_RUN_AS_NODE;
+    try {
+      const result = require("node:child_process").spawnSync(electron, [__filename, ...process.argv.slice(2)], {
+        env: childEnv, stdio: "inherit", windowsHide: true, timeout: 60000
+      });
+      if (result.error) throw result.error;
+      process.exitCode = result.status ?? 1;
+    } finally {
+      const resolved = path.resolve(testRoot);
+      if (path.dirname(resolved) !== path.resolve(os.tmpdir()) || !path.basename(resolved).startsWith("codex-env-wizard-")) {
+        throw new Error("Unexpected test cleanup path");
+      }
+      await fs.rm(resolved, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    }
+  })().catch((error) => { console.error(error); process.exitCode = 1; });
+} else {
+const { app, BrowserWindow, ipcMain } = electron;
 
 app.disableHardwareAcceleration();
+app.on("window-all-closed", () => {});
 let win;
 
 async function evaluate(expression) {
@@ -27,7 +53,9 @@ async function nextStep(step) {
 }
 
 async function run() {
-  const testRoot = await fs.mkdtemp(path.join(os.tmpdir(), "codex-env-wizard-"));
+  const officialApi = process.argv.includes("--official-api");
+  const testRoot = process.env.CODEX_ENV_WIZARD_TEST_ROOT;
+  if (!testRoot) throw new Error("Run this verification script with Node.");
   process.env.CODEX_PROFILE_MANAGER_HOME_OVERRIDE = testRoot;
   process.env.CODEX_PROFILE_MANAGER_PLATFORM_OVERRIDE = "win32";
   process.env.APPDATA = path.join(testRoot, "AppData");
@@ -66,7 +94,22 @@ async function run() {
     await waitFor('document.querySelector(".sidebar-add-button")');
     await evaluate('document.querySelector(".sidebar-add-button").click()');
     await nextStep("Provider");
-    await evaluate('document.querySelectorAll(".auth-mode-option")[2].click()');
+    if (officialApi) {
+      await evaluate(`(() => {
+        const provider = document.querySelector(".form select");
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(provider, "official_openai");
+        provider.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`);
+      await waitFor('document.querySelector(".form .field-note")?.textContent.includes("Choose an official model")');
+      assert.equal(await evaluate('document.querySelector(".form .input-action-row")'), null, "official API must not ask for a model");
+      await evaluate(`(() => {
+        const apiKey = document.querySelector('.form input[type="password"]');
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(apiKey, "sk-test-official-wizard");
+        apiKey.dispatchEvent(new Event("input", { bubbles: true }));
+      })()`);
+    } else {
+      await evaluate('document.querySelectorAll(".auth-mode-option")[2].click()');
+    }
     await nextStep(".env file");
     await waitFor('document.querySelector(".env-file-editor") && !document.querySelector(".env-file-editor").disabled');
     assert.equal(await evaluate('document.querySelector(".env-file-editor").value'), original.replace(/\r\n/g, "\n"));
@@ -91,13 +134,22 @@ async function run() {
     await waitFor('!document.querySelector(".env-file-editor") && !document.querySelector(".wizard-nav")');
     const profiles = await service.listProfiles();
     assert.equal(profiles.length, 1);
+    assert.equal(profiles[0].provider.model, undefined, "official profiles must not store a model preset");
+    const config = parse(await fs.readFile(path.join(profiles[0].paths.codexHome, "config.toml"), "utf8"));
+    assert.equal(config.model, undefined);
+    assert.equal(config.model_reasoning_effort, undefined);
+    if (officialApi) {
+      await waitFor('Array.from(document.querySelectorAll(".edit-box .field-note")).some(note => note.textContent.includes("Choose an official model"))');
+      assert.equal(await evaluate('document.querySelector(".edit-box .input-action-row")'), null);
+      assert.equal(await evaluate('document.querySelector(".edit-box .button-row button:last-child").disabled'), false, "official API save must not require a model");
+    }
     assert.equal(await fs.readFile(path.join(profiles[0].paths.codexHome, ".env"), "utf8"), edited);
     assert.equal(await fs.readFile(defaultEnvPath, "utf8"), original);
-    console.log("Profile .env wizard verification passed (preload, full preview, editing, navigation, generation, source isolation).");
+    console.log(`Profile .env wizard verification passed (${officialApi ? "official API" : "account"}, no model preset, editing, navigation, generation, source isolation).`);
   } finally {
     if (win && !win.isDestroyed()) win.destroy();
-    await fs.rm(testRoot, { recursive: true, force: true });
   }
 }
 
 run().then(() => app.exit(0), (error) => { console.error(error); app.exit(1); });
+}

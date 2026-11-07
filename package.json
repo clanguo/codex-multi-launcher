@@ -37,7 +37,7 @@
     "verify:win-inheritance": "npm run build:main && node scripts/verify-windows-inheritance.mjs",
     "verify:official-config": "npm run build:main && node scripts/verify-official-config-inheritance.mjs",
     "verify:profile-env": "npm run build:main && node scripts/verify-env-profile-create.mjs",
-    "verify:env-wizard": "npm run build && electron scripts/verify-env-wizard.cjs",
+    "verify:env-wizard": "npm run build && node scripts/verify-env-wizard.cjs && node scripts/verify-env-wizard.cjs --official-api",
     "verify:win-profile-create": "npm run build:main && node scripts/verify-windows-profile-create-smoke.mjs",
     "verify:win-session-sync": "npm run build:main && node scripts/verify-windows-session-sync.mjs",
     "verify:subscription-auth": "npm run build:main && node scripts/verify-subscription-auth.mjs",

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { parse } from "smol-toml";
@@ -11,12 +12,14 @@ process.env.APPDATA = path.join(testRoot, "AppData", "Roaming");
 
 const { createProfile, updateProfile } = await import("../dist-electron/main/profile-service.js");
 const { listConfigBackups, writeCodexConfig } = await import("../dist-electron/main/codex-config.js");
+const { testProvider } = await import("../dist-electron/main/provider-test.js");
 const defaultHome = path.join(testRoot, ".codex");
 const sourcePath = path.join(defaultHome, "config.toml");
 const codexAppPath = path.join(testRoot, "Codex.exe");
 const apiKey = "sk-test-official-inheritance";
 const sourceLines = [
   'model = "old-model"',
+  'model_reasoning_effort = "high"',
   'model_provider = "proxy"',
   'profile = "legacy.proxy"',
   'openai_base_url = "https://old-proxy.invalid/v1"',
@@ -36,6 +39,7 @@ const sourceLines = [
   'experimental_bearer_token = "old-provider-token"',
   '',
   '[profiles."legacy.proxy"] # retain general settings in named profiles',
+  'model = "old-profile-model"',
   'model_provider = "proxy"',
   'openai_base_url = "https://old-proxy.invalid/v1"',
   'forced_login_method = "api"',
@@ -57,10 +61,10 @@ const sourceLines = [
 
 function assertOfficialConfig(raw, label, inherit = true) {
   const config = parse(raw);
-  assert.equal(config.model, "gpt-5.2", label);
-  assert.equal(config.model_reasoning_effort, "medium", label);
+  assert.equal(config.model, undefined, label);
+  assert.equal(config.model_reasoning_effort, undefined, label);
   const forbiddenKeys = ["model_provider", "model_providers", "profile", "openai_base_url",
-    "chatgpt_base_url", "forced_login_method", "forced_chatgpt_workspace_id", "model_catalog_json"];
+    "chatgpt_base_url", "forced_login_method", "forced_chatgpt_workspace_id", "model_catalog_json", "model", "model_reasoning_effort"];
   for (const table of [config, ...Object.values(config.profiles ?? {})]) {
     for (const key of forbiddenKeys) {
       assert.equal(Object.hasOwn(table, key), false, `${label}: inherited ${key}`);
@@ -102,6 +106,7 @@ try {
         provider: { type: "official_openai", displayName: "OpenAI", model: "gpt-5.2", apiKey }
       });
       const { profile, configPath } = result;
+      assert.equal(profile.provider.model, undefined, "official presets from stale clients must be ignored");
       assertOfficialConfig(await fs.readFile(configPath, "utf8"), label);
       assert.equal(await fs.readFile(path.join(profile.paths.codexHome, "skills", "sample", "SKILL.md"), "utf8"), "Sample skill\n");
       const authPath = path.join(profile.paths.codexHome, "auth.json");
@@ -120,6 +125,17 @@ try {
       await writeCodexConfig(profile, { preserveExistingConfig: true });
       assert.equal(await fs.readFile(configPath, "utf8"), repaired, `${label}: repeated writes`);
       assert.equal(await fs.readFile(authPath, "utf8"), authBefore, `${label}: account/API auth unchanged`);
+
+      await fs.writeFile(configPath, 'model = "chosen-in-app"\nmodel_reasoning_effort = "high"\n');
+      await writeCodexConfig(profile, { preserveExistingConfig: true });
+      await updateProfile({ profileId: profile.id, provider: { displayName: "OpenAI" } });
+      const appConfig = parse(await fs.readFile(configPath, "utf8"));
+      assert.equal(appConfig.model, "chosen-in-app", "App model choices must survive launch/update writes");
+      assert.equal(appConfig.model_reasoning_effort, "high");
+
+      await fs.writeFile(configPath, '# --- Codex Profile Manager managed settings ---\nmodel = "old-managed-model"\nmodel_reasoning_effort = "medium"\n# --- End Codex Profile Manager managed settings ---\n');
+      await writeCodexConfig(profile, { preserveExistingConfig: true });
+      assert.equal(parse(await fs.readFile(configPath, "utf8")).model, undefined, "legacy managed presets must be removed");
     }
     assert.equal(await fs.readFile(sourcePath, "utf8"), source, "default config unchanged");
   }
@@ -129,7 +145,7 @@ try {
       authMode,
       inheritDefaultConfig: false,
       codexAppPath,
-      provider: { type: "official_openai", displayName: "OpenAI", model: "gpt-5.2", apiKey }
+      provider: { type: "official_openai", displayName: "OpenAI", apiKey }
     });
     assertOfficialConfig(await fs.readFile(result.configPath, "utf8"), `fresh-${authMode}`, false);
   }
@@ -154,6 +170,28 @@ try {
   assert.equal(proxyConfig.model_provider, "proxy");
   assert.equal(proxyConfig.model_providers.proxy.base_url, "https://new-proxy.invalid/v1");
   assert.equal(proxyConfig.features.multi_agent, true);
+
+  let status = 200;
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    requests.push(request.url);
+    response.writeHead(status, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ data: [{ id: "model-one" }, { id: "model-two" }] }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const connection = await testProvider({ baseUrl, apiKey });
+    assert.equal(connection.ok, true);
+    assert.equal(connection.testedResponsesEndpoint, false, "official connection tests must not select a Responses model");
+    assert.deepEqual(requests, ["/models"]);
+    status = 401;
+    assert.equal((await testProvider({ baseUrl, apiKey })).status, "auth_failed");
+    status = 503;
+    assert.equal((await testProvider({ baseUrl, apiKey })).ok, false);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
   console.log("Official config inheritance verification passed (account/API, LF/CRLF, quoted/inline TOML, repair, backups, auth isolation).");
 } finally {
   await fs.rm(testRoot, { recursive: true, force: true });

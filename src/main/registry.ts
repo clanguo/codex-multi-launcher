@@ -34,6 +34,9 @@ export async function findProfile(profileId: string): Promise<ManagedProfile | n
 }
 
 export async function createProfileRecord(input: CreateProfileInput): Promise<ManagedProfile> {
+  if (input.provider.type === "third_party_responses" && !input.provider.model?.trim()) {
+    throw new Error("A model is required for third-party providers.");
+  }
   const appPaths = getAppPaths();
   const registry = await loadRegistry();
   const baseSlug = slugifyProfileName(input.name);
@@ -73,7 +76,7 @@ export async function createProfileRecord(input: CreateProfileInput): Promise<Ma
       baseUrl: input.provider.baseUrl,
       wireApi: "responses",
       envKeyName,
-      model: input.provider.model,
+      model: input.provider.type === "official_openai" ? undefined : input.provider.model,
       reasoningEffort: input.provider.reasoningEffort ?? "medium"
     },
     auth: {
@@ -146,7 +149,10 @@ export async function updateProfileRecord(input: UpdateProfileInput): Promise<Ma
 
   profile.provider.displayName = input.provider.displayName;
   profile.provider.baseUrl = input.provider.baseUrl;
-  profile.provider.model = input.provider.model;
+  if (profile.provider.type === "third_party_responses" && !input.provider.model?.trim()) {
+    throw new Error("A model is required for third-party providers.");
+  }
+  profile.provider.model = profile.provider.type === "official_openai" ? undefined : input.provider.model;
   profile.provider.reasoningEffort = input.provider.reasoningEffort ?? profile.provider.reasoningEffort;
   profile.appearance = {
     ...normalizeProfile(profile).appearance,
