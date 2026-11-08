@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import fsNative from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -16,10 +17,20 @@ export function defaultExecutablePathEnv(): string {
 function windowsCliFallbackPaths(): string[] {
   const home = os.homedir();
   const localAppData = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
-  return [
+  const roots = [
     process.env.CODEX_INSTALL_DIR,
-    path.join(localAppData, "Programs", "OpenAI", "Codex", "bin")
+    path.join(localAppData, "Programs", "OpenAI", "Codex", "bin"),
+    path.join(localAppData, "OpenAI", "Codex", "bin")
   ].filter((entry): entry is string => Boolean(entry));
+  const versionedBins = roots.flatMap(root => {
+    try {
+      return fsNative.readdirSync(root, { withFileTypes: true })
+        .filter(entry => entry.isDirectory())
+        .map(entry => path.join(root, entry.name))
+        .filter(directory => fsNative.existsSync(path.join(directory, "codex.exe")));
+    } catch { return []; }
+  });
+  return [...roots, ...versionedBins];
 }
 
 function macosGuiFallbackPaths(): string[] {
