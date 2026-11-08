@@ -38,6 +38,7 @@ Codex 多开助手将这些操作整理成了可视化创建流程。
 - 每个配置独立使用 `CODEX_HOME` 和 `--user-data-dir`。
 - 在主程序中直接打开对应的独立窗口。
 - 每个 profile 生成独立 Codex CLI 命令，支持 Windows、macOS 用户 PATH 注册。
+- 为每个 profile 单独查询 Codex 订阅用量或第三方渠道余额。
 - 支持应用内检查、下载和安装更新。
 - API Key 本地加密保存，不进入诊断信息。
 - 保留 Codex 全局状态、新增项目和历史对话，重启后不会被重复初始化。
@@ -65,6 +66,10 @@ Codex 多开助手将这些操作整理成了可视化创建流程。
 ### API Key
 
 支持官方 OpenAI API 和实现了 Responses API 的第三方兼容接口。是否可用取决于服务商的实际接口能力；只支持 Chat Completions 的接口不一定能在 Codex 桌面版中使用。
+
+## 用量和余额查询
+
+在 profile 详情中单独启用和刷新用量查询。ChatGPT 账号 profile 查询 Codex 订阅窗口；第三方渠道可配置 URL、请求头和响应 JSON 字段。独立查询凭据加密保存在本地。详见[Profile 用量查询设置](docs/profile-usage.zh-CN.md)。
 
 ## 独立 CLI 命令
 

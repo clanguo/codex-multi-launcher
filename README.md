@@ -38,6 +38,7 @@ Codex Multi Launcher turns those workflows into a guided desktop interface.
 - Keep `CODEX_HOME` and `--user-data-dir` isolated for every profile.
 - Generate launchers that can be opened directly from the app.
 - Generate a separate Codex CLI command per profile, with user PATH registration on Windows and macOS.
+- Query Codex subscription usage or third-party provider balances separately for each profile.
 - Check for updates and install supported releases from inside the app.
 - Encrypt API keys locally and exclude them from diagnostics.
 - Preserve Codex global state, project lists, and conversation history across restarts.
