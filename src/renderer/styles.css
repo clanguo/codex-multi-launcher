@@ -331,6 +331,15 @@ code {
   padding: 16px 0;
 }
 
+.profile-usage-box { border-top: 1px solid #e8edf4; padding: 16px 0; display: grid; gap: 10px; }
+.profile-usage-box > label { display: grid; gap: 5px; color: #5b6575; font-size: 13px; }
+.profile-usage-box .usage-toggle { display: flex; align-items: center; gap: 8px; }
+.profile-usage-box textarea { resize: vertical; font-family: monospace; }
+.usage-path-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.usage-path-grid label { display: grid; gap: 5px; color: #5b6575; font-size: 13px; }
+.usage-result { padding: 10px 12px; border-radius: 8px; background: #f5f8fd; }
+.usage-result p { margin: 5px 0; }
+
 .profile-cli-command {
   display: flex;
   align-items: center;

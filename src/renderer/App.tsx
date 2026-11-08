@@ -41,6 +41,8 @@ import type {
   ManagedProfile,
   ProfileRuntimeInfo,
   ProfileCliInfo,
+  ProfileUsageQueryConfig,
+  ProfileUsageResult,
   RuntimeSnapshot,
   ProviderModelsResult,
   ProviderTestResult,
@@ -123,6 +125,24 @@ const TEXT: Record<Language, Record<string, string>> = {
     cliMissing: "未检测到基础 Codex CLI。请安装 CLI，或在此 profile 的 .env 中设置 CODEX_PROFILE_CLI_PATH。",
     cliCopied: "已复制",
     cliRegistering: "注册中…",
+    usageTitle: "用量 / 余额查询",
+    usageEnable: "启用查询",
+    usageMode: "查询方式",
+    usageOfficial: "Codex 账号订阅用量",
+    usageProvider: "渠道 API Key 查询",
+    usageCustom: "自定义凭据查询",
+    usageUrl: "查询 URL",
+    usageHeaders: "请求头（JSON）",
+    usageCredential: "查询凭据（留空使用渠道 API Key）",
+    usageRemainingPath: "余额 JSON 路径",
+    usageTotalPath: "总额 JSON 路径",
+    usageUsedPath: "已用 JSON 路径",
+    usageUnit: "单位",
+    usageSave: "保存查询设置",
+    usageRefresh: "查询用量",
+    usageLoading: "查询中…",
+    usageSaved: "查询设置已保存",
+    usageError: "用量查询失败",
     restore: "恢复",
     deletePermanently: "彻底删除",
     remove: "移除",
@@ -374,6 +394,24 @@ const TEXT: Record<Language, Record<string, string>> = {
     cliMissing: "Base Codex CLI was not detected. Install it, or set CODEX_PROFILE_CLI_PATH in this profile's .env.",
     cliCopied: "Copied",
     cliRegistering: "Registering…",
+    usageTitle: "Usage / balance query",
+    usageEnable: "Enable query",
+    usageMode: "Query method",
+    usageOfficial: "Codex account subscription usage",
+    usageProvider: "Provider API key query",
+    usageCustom: "Custom credential query",
+    usageUrl: "Query URL",
+    usageHeaders: "Request headers (JSON)",
+    usageCredential: "Query credential (blank uses provider API key)",
+    usageRemainingPath: "Remaining JSON path",
+    usageTotalPath: "Total JSON path",
+    usageUsedPath: "Used JSON path",
+    usageUnit: "Unit",
+    usageSave: "Save query settings",
+    usageRefresh: "Query usage",
+    usageLoading: "Querying…",
+    usageSaved: "Usage query settings saved",
+    usageError: "Usage query failed",
     restore: "Restore",
     deletePermanently: "Delete Permanently",
     remove: "Remove",
@@ -611,6 +649,11 @@ export function App() {
   const [cliInfo, setCliInfo] = useState<ProfileCliInfo | null>(null);
   const [cliError, setCliError] = useState<string | null>(null);
   const [isRegisteringCli, setIsRegisteringCli] = useState(false);
+  const [usageConfig, setUsageConfig] = useState<ProfileUsageQueryConfig>({ enabled: false, mode: "provider_balance", method: "GET", headers: "{}", remainingPath: "balance", unit: "USD" });
+  const [usageCredential, setUsageCredential] = useState("");
+  const [usageResult, setUsageResult] = useState<ProfileUsageResult | null>(null);
+  const [usageError, setUsageError] = useState("");
+  const [isQueryingUsage, setIsQueryingUsage] = useState(false);
   const selectedCliProfile = useRef<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [wizardStep, setWizardStep] = useState<WizardStep>("profile");
@@ -788,8 +831,31 @@ export function App() {
     });
     setEditProviderTest(null);
     setEditProviderModels(null);
+    setUsageConfig(selectedProfile.usageQuery ?? { enabled: selectedProfile.auth?.mode === "chatgpt_account", mode: selectedProfile.auth?.mode === "chatgpt_account" ? "codex_account" : "provider_balance", method: "GET", headers: "{}", remainingPath: "balance", unit: "USD" });
+    setUsageCredential("");
+    setUsageResult(null);
+    setUsageError("");
     void window.codexProfileManager.listConfigBackups(selectedProfile.id).then(setConfigBackups);
   }, [selectedProfile]);
+
+  async function saveUsageSettings() {
+    if (!selectedProfile) return;
+    try {
+      await window.codexProfileManager.updateProfile({ profileId: selectedProfile.id, usageQuery: usageConfig, usageCredential, provider: { displayName: selectedProfile.provider.displayName, baseUrl: selectedProfile.provider.baseUrl, model: selectedProfile.provider.model } });
+      setUsageCredential("");
+      await refresh();
+      showToast(t.usageSaved);
+    } catch (error) { setUsageError(error instanceof Error ? error.message : t.usageError); }
+  }
+
+  async function refreshProfileUsage() {
+    if (!selectedProfile) return;
+    setIsQueryingUsage(true);
+    setUsageError("");
+    try { setUsageResult(await window.codexProfileManager.getProfileUsage(selectedProfile.id)); }
+    catch (error) { setUsageError(error instanceof Error ? error.message : t.usageError); }
+    finally { setIsQueryingUsage(false); }
+  }
 
   useEffect(() => {
     let active = true;
@@ -1628,6 +1694,36 @@ export function App() {
                   <ProviderTestBox providerTest={editProviderTest} t={t} />
                 </div>
               )}
+              <section className="profile-usage-box">
+                <h4>{t.usageTitle}</h4>
+                <label className="usage-toggle"><input type="checkbox" checked={usageConfig.enabled} onChange={(event) => setUsageConfig({ ...usageConfig, enabled: event.target.checked })} />{t.usageEnable}</label>
+                <label>{t.usageMode}<select value={usageConfig.mode} onChange={(event) => setUsageConfig({ ...usageConfig, mode: event.target.value as ProfileUsageQueryConfig["mode"] })}>
+                  {selectedProfile.auth?.mode === "chatgpt_account" ? <option value="codex_account">{t.usageOfficial}</option> : null}
+                  <option value="provider_balance">{t.usageProvider}</option><option value="custom">{t.usageCustom}</option>
+                </select></label>
+                {usageConfig.mode !== "codex_account" ? <>
+                  <label>{t.usageUrl}<input value={usageConfig.url ?? ""} onChange={(event) => setUsageConfig({ ...usageConfig, url: event.target.value })} placeholder="https://provider.example/api/usage" /></label>
+                  <label>{t.usageMethod}<select value={usageConfig.method ?? "GET"} onChange={(event) => setUsageConfig({ ...usageConfig, method: event.target.value as "GET" | "POST" })}><option>GET</option><option>POST</option></select></label>
+                  <label>{t.usageHeaders}<textarea rows={3} value={usageConfig.headers ?? "{}"} onChange={(event) => setUsageConfig({ ...usageConfig, headers: event.target.value })} placeholder={'{"Authorization":"Bearer {{apiKey}}"}'} /></label>
+                  {usageConfig.method === "POST" ? <label>Request body (JSON)<textarea rows={3} value={usageConfig.body ?? ""} onChange={(event) => setUsageConfig({ ...usageConfig, body: event.target.value })} placeholder="{}" /></label> : null}
+                  <label>{t.usageCredential}<input type="password" value={usageCredential} onChange={(event) => setUsageCredential(event.target.value)} /></label>
+                  <div className="usage-path-grid">
+                    <label>{t.usageRemainingPath}<input value={usageConfig.remainingPath ?? ""} onChange={(event) => setUsageConfig({ ...usageConfig, remainingPath: event.target.value })} placeholder="data.balance" /></label>
+                    <label>{t.usageTotalPath}<input value={usageConfig.totalPath ?? ""} onChange={(event) => setUsageConfig({ ...usageConfig, totalPath: event.target.value })} placeholder="data.total" /></label>
+                    <label>{t.usageUsedPath}<input value={usageConfig.usedPath ?? ""} onChange={(event) => setUsageConfig({ ...usageConfig, usedPath: event.target.value })} placeholder="data.used" /></label>
+                    <label>{t.usageUnit}<input value={usageConfig.unit ?? ""} onChange={(event) => setUsageConfig({ ...usageConfig, unit: event.target.value })} placeholder="USD" /></label>
+                  </div>
+                </> : <p className="field-note">Reads this profile's Codex login and queries its subscription windows.</p>}
+                <div className="button-row"><button className="button secondary" disabled={isUpdatingProfile} onClick={() => void saveUsageSettings()} type="button">{t.usageSave}</button><button className="button secondary" disabled={isQueryingUsage || !usageConfig.enabled} onClick={() => void refreshProfileUsage()} type="button"><RefreshCcw size={14} />{isQueryingUsage ? t.usageLoading : t.usageRefresh}</button></div>
+                {usageResult ? <div className="usage-result">
+                  {usageResult.planName ? <strong>{usageResult.planName}</strong> : null}
+                  {usageResult.windows?.map((window) => <p key={window.name}>{window.name}: {window.usedPercent}% used{window.resetsAt ? ` · resets ${new Date(window.resetsAt).toLocaleString()}` : ""}</p>)}
+                  {usageResult.remaining !== undefined ? <p>Remaining: {usageResult.remaining} {usageResult.unit} {usageResult.total !== undefined ? `/ ${usageResult.total}` : ""}</p> : null}
+                  {usageResult.used !== undefined ? <p>Used: {usageResult.used} {usageResult.unit}</p> : null}
+                  {!usageResult.windows?.length ? <small>{new Date(usageResult.queriedAt).toLocaleString()}</small> : null}
+                </div> : null}
+                {usageError ? <p className="field-note danger">{usageError}</p> : null}
+              </section>
               <section className="profile-cli-box">
                 <h4>{t.profileCliTitle}</h4>
                 <p className="field-note">{t.profileCliDescription}</p>
