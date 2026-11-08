@@ -1,6 +1,6 @@
 # Profile 用量与余额查询
 
-用量查询设置保存在各自 profile 中。在详情页启用查询后，可手动刷新。官方 ChatGPT 账号使用该 profile 的 `auth.json` 登录令牌查询 Codex 使用窗口；第三方/API profile 可配置查询 URL、GET/POST、请求头、POST 请求体和响应 JSON 字段路径。
+用量查询设置保存在各自 profile 中。在详情页启用查询后，可手动刷新。官方 ChatGPT 账号通过 Codex CLI app-server 在该 profile 的 `CODEX_HOME` 下查询订阅窗口。这样会沿用 Codex 自身的认证加载方式，包括文件和系统凭据库；不会要求应用直接读取 `auth.json` 里的令牌。第三方/API profile 可配置查询 URL、GET/POST、请求头、POST 请求体和响应 JSON 字段路径。
 
 请求头和请求体支持 `{{apiKey}}`、`{{credential}}`、`{{baseUrl}}` 占位符。`apiKey` / `credential` 默认使用该 profile 保存的 provider API Key；也可在“查询凭据”中输入独立 token。独立 token 和 API Key 一样保存在本地加密存储中，URL、请求头模板和 JSON 路径保存在 profile 配置中。避免直接把 token 写入请求头模板。
 
@@ -8,7 +8,7 @@ JSON 路径使用点号，例如 `data.balance`、`quota.remaining`。填入余�
 
 ## Codex 账号订阅
 
-账号登录 profile 使用 `https://chatgpt.com/backend-api/wham/usage`，读取该 profile 自己的 access token 和 account ID，并显示主、次用量窗口及重置时间。此 Codex 使用接口不是公开稳定的计费 API；接口或响应字段变化时，查询可能失败，需要更新适配。令牌缺失或过期时，请在对应 profile 的 Codex 窗口重新登录。
+账号登录 profile 使用 Codex CLI app-server 的 `account/rateLimits/read` 读取主、次用量窗口及重置时间。app-server 会自行加载当前 profile 的凭据；会话缺失或过期时，请在对应 profile 登录后再查询。其上游用量数据由 Codex 服务提供，服务字段或客户端协议变化时，可能需要更新适配。
 
 ## 第三方渠道
 
