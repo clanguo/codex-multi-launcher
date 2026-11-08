@@ -331,14 +331,23 @@ code {
   padding: 16px 0;
 }
 
-.profile-usage-box { border-top: 1px solid #e8edf4; padding: 16px 0; display: grid; gap: 10px; }
-.profile-usage-box > label { display: grid; gap: 5px; color: #5b6575; font-size: 13px; }
-.profile-usage-box .usage-toggle { display: flex; align-items: center; gap: 8px; }
-.profile-usage-box textarea { resize: vertical; font-family: monospace; }
-.usage-path-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.usage-path-grid label { display: grid; gap: 5px; color: #5b6575; font-size: 13px; }
-.usage-result { padding: 10px 12px; border-radius: 8px; background: #f5f8fd; }
-.usage-result p { margin: 5px 0; }
+.profile-usage-box { margin: 8px 0; padding: 20px; display: grid; gap: 14px; border: 1px solid #dfe7f1; border-radius: 14px; background: linear-gradient(145deg, #fbfdff 0%, #f5f8fd 100%); box-shadow: 0 4px 14px #2339540a; }
+.profile-usage-box h4 { margin: 0; font-size: 16px; }
+.profile-usage-box > label { display: grid; gap: 6px; color: #46556a; font-size: 13px; font-weight: 550; }
+.profile-usage-box .usage-toggle { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border: 1px solid #e3eaf3; border-radius: 9px; background: #fff; cursor: pointer; }
+.profile-usage-box .usage-toggle input { width: 16px; height: 16px; accent-color: #386fe5; }
+.profile-usage-box textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.usage-path-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.usage-path-grid label { display: grid; gap: 6px; color: #46556a; font-size: 13px; font-weight: 550; }
+.usage-result { padding: 14px 16px; border: 1px solid #dce7f5; border-radius: 10px; background: #fff; color: #34445a; }
+.usage-result p { margin: 8px 0; }
+.profile-usage-box .button-row { margin-top: 2px; }
+.usage-window-row { display: grid; gap: 7px; padding: 8px 0; }
+.usage-window-row > div:first-child { display: flex; justify-content: space-between; gap: 12px; }
+.usage-window-row > div:first-child span { color: #66758a; font-variant-numeric: tabular-nums; }
+.usage-window-row > small { color: #77859a; }
+.usage-meter { height: 7px; border-radius: 99px; overflow: hidden; background: #e8eef7; }
+.usage-meter > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #4ca879, #e8a54a 75%, #d96868); transition: width 250ms ease; }
 
 .profile-cli-command {
   display: flex;

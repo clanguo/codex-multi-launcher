@@ -1697,6 +1697,7 @@ export function App() {
               <section className="profile-usage-box">
                 <h4>{t.usageTitle}</h4>
                 <label className="usage-toggle"><input type="checkbox" checked={usageConfig.enabled} onChange={(event) => setUsageConfig({ ...usageConfig, enabled: event.target.checked })} />{t.usageEnable}</label>
+                {usageConfig.enabled ? <>
                 <label>{t.usageMode}<select value={usageConfig.mode} onChange={(event) => setUsageConfig({ ...usageConfig, mode: event.target.value as ProfileUsageQueryConfig["mode"] })}>
                   {selectedProfile.auth?.mode === "chatgpt_account" ? <option value="codex_account">{t.usageOfficial}</option> : null}
                   <option value="provider_balance">{t.usageProvider}</option><option value="custom">{t.usageCustom}</option>
@@ -1713,13 +1714,14 @@ export function App() {
                     <label>{t.usageUsedPath}<input value={usageConfig.usedPath ?? ""} onChange={(event) => setUsageConfig({ ...usageConfig, usedPath: event.target.value })} placeholder="data.used" /></label>
                     <label>{t.usageUnit}<input value={usageConfig.unit ?? ""} onChange={(event) => setUsageConfig({ ...usageConfig, unit: event.target.value })} placeholder="USD" /></label>
                   </div>
-                </> : <p className="field-note">Reads this profile's Codex login and queries its subscription windows.</p>}
+                </> : <p className="field-note">{languageText("读取此 profile 的 Codex 登录状态和订阅用量窗口。", "Reads this profile's Codex login and subscription windows.", "Показывает использование подписки Codex для этого профиля.")}</p>}
+                </> : null}
                 <div className="button-row"><button className="button secondary" disabled={isUpdatingProfile} onClick={() => void saveUsageSettings()} type="button">{t.usageSave}</button><button className="button secondary" disabled={isQueryingUsage || !usageConfig.enabled} onClick={() => void refreshProfileUsage()} type="button"><RefreshCcw size={14} />{isQueryingUsage ? t.usageLoading : t.usageRefresh}</button></div>
                 {usageResult ? <div className="usage-result">
                   {usageResult.planName ? <strong>{usageResult.planName}</strong> : null}
-                  {usageResult.windows?.map((window) => <p key={window.name}>{window.name}: {window.usedPercent}% used{window.resetsAt ? ` · resets ${new Date(window.resetsAt).toLocaleString()}` : ""}</p>)}
-                  {usageResult.remaining !== undefined ? <p>Remaining: {usageResult.remaining} {usageResult.unit} {usageResult.total !== undefined ? `/ ${usageResult.total}` : ""}</p> : null}
-                  {usageResult.used !== undefined ? <p>Used: {usageResult.used} {usageResult.unit}</p> : null}
+                  {usageResult.windows?.map((window) => <div className="usage-window-row" key={window.name}><div><strong>{window.name}</strong><span>{window.usedPercent}% used</span></div><div className="usage-meter"><span style={{ width: `${Math.max(0, Math.min(100, window.usedPercent))}%` }} /></div>{window.resetsAt ? <small>Resets {new Date(window.resetsAt).toLocaleString()}</small> : null}</div>)}
+                  {usageResult.remaining !== undefined ? <p>{languageText("剩余", "Remaining", "Остаток")}: {usageResult.remaining} {usageResult.unit} {usageResult.total !== undefined ? `/ ${usageResult.total}` : ""}</p> : null}
+                  {usageResult.used !== undefined ? <p>{languageText("已用", "Used", "Использовано")}: {usageResult.used} {usageResult.unit}</p> : null}
                   {!usageResult.windows?.length ? <small>{new Date(usageResult.queriedAt).toLocaleString()}</small> : null}
                 </div> : null}
                 {usageError ? <p className="field-note danger">{usageError}</p> : null}
