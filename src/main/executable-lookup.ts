@@ -9,8 +9,17 @@ const execFileAsync = promisify(execFile);
 
 export function defaultExecutablePathEnv(): string {
   const currentPath = process.env.PATH ?? "";
-  const fallbackPaths = getRuntimePlatform() === "darwin" ? macosGuiFallbackPaths() : [];
+  const fallbackPaths = getRuntimePlatform() === "darwin" ? macosGuiFallbackPaths() : getRuntimePlatform() === "win32" ? windowsCliFallbackPaths() : [];
   return uniquePathEntries([...currentPath.split(path.delimiter), ...fallbackPaths]).join(path.delimiter);
+}
+
+function windowsCliFallbackPaths(): string[] {
+  const home = os.homedir();
+  const localAppData = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
+  return [
+    process.env.CODEX_INSTALL_DIR,
+    path.join(localAppData, "Programs", "OpenAI", "Codex", "bin")
+  ].filter((entry): entry is string => Boolean(entry));
 }
 
 function macosGuiFallbackPaths(): string[] {
