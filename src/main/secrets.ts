@@ -14,6 +14,7 @@ interface PlainSecret {
 interface PlainSecretsFile {
   schemaVersion: 1;
   secrets: PlainSecret[];
+  usageCredentials?: Record<string, string>;
 }
 
 interface EncryptedSecretsFile {
@@ -102,7 +103,7 @@ export async function upsertApiKey(secret: PlainSecret): Promise<void> {
     (item) => !(item.profileId === secret.profileId && item.providerId === secret.providerId)
   );
   nextSecrets.push(secret);
-  await saveSecrets({ schemaVersion: 1, secrets: nextSecrets });
+  await saveSecrets({ ...secrets, schemaVersion: 1, secrets: nextSecrets });
 }
 
 export async function getApiKey(profileId: string, providerId: string): Promise<string | null> {
@@ -112,8 +113,23 @@ export async function getApiKey(profileId: string, providerId: string): Promise<
 
 export async function deleteProfileSecrets(profileId: string): Promise<void> {
   const secrets = await loadSecrets();
+  const usageCredentials = { ...secrets.usageCredentials };
+  delete usageCredentials[profileId];
   await saveSecrets({
     schemaVersion: 1,
-    secrets: secrets.secrets.filter((item) => item.profileId !== profileId)
+    secrets: secrets.secrets.filter((item) => item.profileId !== profileId),
+    usageCredentials
   });
+}
+
+export async function setUsageCredential(profileId: string, credential: string | null): Promise<void> {
+  const secrets = await loadSecrets();
+  const usageCredentials = { ...secrets.usageCredentials };
+  if (credential?.trim()) usageCredentials[profileId] = credential.trim();
+  else delete usageCredentials[profileId];
+  await saveSecrets({ ...secrets, usageCredentials });
+}
+
+export async function getUsageCredential(profileId: string): Promise<string | null> {
+  return (await loadSecrets()).usageCredentials?.[profileId] ?? null;
 }

@@ -13,7 +13,8 @@ import { writeProfileEnvFile } from "./profile-env.js";
 import { ensureWindowsAppxDesktopCache } from "./windows-appx-cache.js";
 import { restoreWindowsDesktopTaskbarIdentity } from "./windows-window-icon.js";
 import { listProviderModels, testProvider } from "./provider-test.js";
-import { deleteProfileSecrets, getApiKey, upsertApiKey } from "./secrets.js";
+import { deleteProfileSecrets, getApiKey, setUsageCredential, upsertApiKey } from "./secrets.js";
+import { queryProfileUsage } from "./profile-usage.js";
 import { getRuntimeStatus as inspectRuntimeStatus } from "./runtime.js";
 import { getProfileRuntime } from "./runtime-monitor.js";
 import { cancelSubscriptionAuthorization, getAuthorizedSubscriptionConfig } from "./subscription-auth.js";
@@ -193,6 +194,7 @@ export async function getProfileCliInfo(profileId: string, refreshPath = false) 
 
 export async function updateProfile(input: UpdateProfileInput): Promise<UpdateProfileResult> {
   const profile = await updateProfileRecord(input);
+  if (input.usageCredential !== undefined) await setUsageCredential(profile.id, input.usageCredential);
 
   if (isApiKeyProfile(profile) && input.provider.apiKey) {
     await upsertApiKey({
@@ -214,6 +216,10 @@ export async function updateProfile(input: UpdateProfileInput): Promise<UpdatePr
     configPath,
     launcherPath: launcher.launcherPath
   };
+}
+
+export async function getProfileUsage(profileId: string) {
+  return queryProfileUsage(profileId);
 }
 
 export async function reauthorizeSubscriptionProfile(input: ReauthorizeSubscriptionProfileInput): Promise<UpdateProfileResult> {

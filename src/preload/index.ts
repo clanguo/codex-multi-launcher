@@ -47,6 +47,7 @@ const api: CodexApi = {
   restoreProfile: (profileId: string) => ipcRenderer.invoke("profiles:restore", profileId),
   generateLauncher: (profileId: string) => ipcRenderer.invoke("profiles:generate-launcher", profileId),
   getProfileCliInfo: (profileId: string, refreshPath?: boolean) => ipcRenderer.invoke("profiles:cli-info", profileId, refreshPath),
+  getProfileUsage: (profileId: string) => ipcRenderer.invoke("profiles:usage", profileId),
   openProfile: (profileId: string) => ipcRenderer.invoke("profiles:open", profileId),
   closeProfile: (profileId: string, force?: boolean) => ipcRenderer.invoke("profiles:close", profileId, force)
 };

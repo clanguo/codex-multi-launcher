@@ -46,6 +46,7 @@ const api = {
   restoreProfile: (profileId) => ipcRenderer.invoke("profiles:restore", profileId),
   generateLauncher: (profileId) => ipcRenderer.invoke("profiles:generate-launcher", profileId),
   getProfileCliInfo: (profileId, refreshPath) => ipcRenderer.invoke("profiles:cli-info", profileId, refreshPath),
+  getProfileUsage: (profileId) => ipcRenderer.invoke("profiles:usage", profileId),
   openProfile: (profileId) => ipcRenderer.invoke("profiles:open", profileId),
   closeProfile: (profileId, force) => ipcRenderer.invoke("profiles:close", profileId, force)
 };

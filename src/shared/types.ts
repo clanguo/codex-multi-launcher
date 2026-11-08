@@ -87,12 +87,38 @@ export interface ManagedProfile {
   paths: ProfilePaths;
   provider: ProviderConfig;
   auth: ProfileAuthConfig;
+  usageQuery?: ProfileUsageQueryConfig;
   appearance: ProfileAppearance;
   launch: LaunchMetadata;
   timestamps: {
     createdAt: string;
     updatedAt: string;
   };
+}
+
+export interface ProfileUsageQueryConfig {
+  enabled: boolean;
+  mode: "codex_account" | "provider_balance" | "custom";
+  url?: string;
+  method?: "GET" | "POST";
+  body?: string;
+  headers?: string;
+  remainingPath?: string;
+  totalPath?: string;
+  usedPath?: string;
+  unit?: string;
+}
+
+export interface ProfileUsageResult {
+  profileId: string;
+  mode: ProfileUsageQueryConfig["mode"];
+  queriedAt: string;
+  planName?: string;
+  windows?: Array<{ name: string; usedPercent: number; resetsAt?: string }>;
+  remaining?: number;
+  total?: number;
+  used?: number;
+  unit?: string;
 }
 
 export interface ProfileRuntimeInfo {
@@ -207,6 +233,8 @@ export interface CreateProfileResult {
 export interface UpdateProfileInput {
   profileId: string;
   appearance?: Partial<ProfileAppearance>;
+  usageQuery?: ProfileUsageQueryConfig;
+  usageCredential?: string;
   provider: {
     displayName: string;
     baseUrl?: string;
@@ -430,6 +458,7 @@ export interface CodexApi {
   restoreProfile(profileId: string): Promise<{ ok: true }>;
   generateLauncher(profileId: string): Promise<LauncherResult>;
   getProfileCliInfo(profileId: string, refreshPath?: boolean): Promise<ProfileCliInfo>;
+  getProfileUsage(profileId: string): Promise<ProfileUsageResult>;
   openProfile(profileId: string): Promise<OpenProfileResult>;
   closeProfile(profileId: string, force?: boolean): Promise<CloseProfileResult>;
 }

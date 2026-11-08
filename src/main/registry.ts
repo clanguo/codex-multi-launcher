@@ -155,6 +155,7 @@ export async function updateProfileRecord(input: UpdateProfileInput): Promise<Ma
   }
   profile.provider.model = profile.provider.type === "official_openai" ? undefined : input.provider.model;
   profile.provider.reasoningEffort = input.provider.reasoningEffort ?? profile.provider.reasoningEffort;
+  if (input.usageQuery) profile.usageQuery = { ...input.usageQuery };
   profile.appearance = {
     ...normalizeProfile(profile).appearance,
     ...(input.appearance?.iconBackgroundColor ? { iconBackgroundColor: normalizeHexColor(input.appearance.iconBackgroundColor) } : {})
@@ -209,6 +210,7 @@ function normalizeProfile(profile: ManagedProfile): ManagedProfile {
   profile.auth = {
     mode: profile.auth?.mode ?? "api_key"
   };
+  profile.usageQuery ??= { enabled: profile.auth.mode === "chatgpt_account", mode: profile.auth.mode === "chatgpt_account" ? "codex_account" : "provider_balance" };
   profile.appearance = {
     iconBackgroundColor: normalizeHexColor(profile.appearance?.iconBackgroundColor)
   };
