@@ -11,7 +11,7 @@ import { codexExecutablePath, findWindowsCodexAppxDesktopApp, getDefaultCodexHom
 import { pathExists } from "./fs-utils.js";
 import { writeProfileEnvFile } from "./profile-env.js";
 import { ensureWindowsAppxDesktopCache } from "./windows-appx-cache.js";
-import { restoreWindowsDesktopTaskbarIdentity } from "./windows-window-icon.js";
+import { prepareWindowsProfileTaskbarIdentity, removeWindowsProfileTaskbarIdentity, restoreWindowsDesktopTaskbarIdentity } from "./windows-window-icon.js";
 import { listProviderModels, testProvider } from "./provider-test.js";
 import { deleteProfileSecrets, getApiKey, setUsageCredential, upsertApiKey } from "./secrets.js";
 import { queryProfileUsage } from "./profile-usage.js";
@@ -310,6 +310,9 @@ export async function permanentlyDeleteProfile(profileId: string): Promise<{ ok:
   const profile = await removeProfileRecord(profileId);
   await deleteProfileSecrets(profile.id);
   await removeCliLauncher(profile);
+  if (getRuntimePlatform() === "win32") {
+    await removeWindowsProfileTaskbarIdentity(profile.id).catch(() => undefined);
+  }
   await Promise.all([
     fs.rm(profile.paths.codexHome, { force: true, recursive: true }),
     fs.rm(profile.paths.userDataDir, { force: true, recursive: true }),
@@ -359,10 +362,6 @@ async function launchProfile(profile: ManagedProfile): Promise<{ pid: number | n
     await launchLog.append("repairing profile global state");
     await repairProfileGlobalState(profile);
     let codexExecutable = codexExecutablePath(profile.paths.codexAppPath);
-    const installedWindowsAppx = getRuntimePlatform() === "win32" ? findWindowsCodexAppxDesktopApp() : null;
-    const windowsAppUserModelId = installedWindowsAppx
-      ? `${installedWindowsAppx.packageFamilyName}!${installedWindowsAppx.applicationId}`
-      : null;
     await launchLog.append("resolved desktop executable", { codexExecutable });
 
     const shouldUseAppxCache = getRuntimePlatform() === "win32" && (!(await pathExists(codexExecutable)) || isWindowsAppsPath(codexExecutable));
@@ -396,6 +395,15 @@ async function launchProfile(profile: ManagedProfile): Promise<{ pid: number | n
 
     await launchLog.append("regenerating profile launcher");
     const launcher = await generateLauncher(profile);
+    let windowsTaskbarIdentity: Awaited<ReturnType<typeof prepareWindowsProfileTaskbarIdentity>> | null = null;
+    if (getRuntimePlatform() === "win32") {
+      try {
+        windowsTaskbarIdentity = await prepareWindowsProfileTaskbarIdentity(profile, codexExecutable);
+        await launchLog.append("prepared Windows profile taskbar identity", { ...windowsTaskbarIdentity });
+      } catch (error) {
+        await launchLog.append("failed to prepare Windows profile taskbar identity", serializeError(error));
+      }
+    }
     const launchCommand = getRuntimePlatform() === "darwin"
       ? profileManagedLauncherCommand(profile, launcher.executablePath, codexExecutable, apiKey)
       : profileLaunchCommand(profile, codexExecutable, apiKey);
@@ -414,8 +422,8 @@ async function launchProfile(profile: ManagedProfile): Promise<{ pid: number | n
     child.once("spawn", () => {
       getProfileRuntime().processSpawned(profile.id, child.pid);
       void launchLog.append("desktop app process spawned", { pid: child.pid ?? null });
-      if (getRuntimePlatform() === "win32" && child.pid && windowsAppUserModelId) {
-        void restoreWindowsDesktopTaskbarIdentity(child.pid, windowsAppUserModelId)
+      if (getRuntimePlatform() === "win32" && child.pid && windowsTaskbarIdentity) {
+        void restoreWindowsDesktopTaskbarIdentity(child.pid, windowsTaskbarIdentity.appUserModelId, windowsTaskbarIdentity.iconPath)
           .then((result) => launchLog.append("restored Windows desktop taskbar identity", { ...result }))
           .catch((error: unknown) => launchLog.append("failed to restore Windows desktop taskbar identity", serializeError(error)));
       }
