@@ -1,10 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+import { parseEnv } from "node:util";
+import { resolveCliTarget } from "./cli-runner.js";
+import { defaultExecutablePathEnv } from "./executable-lookup.js";
 import { findProfile } from "./registry.js";
 import { getApiKey, getUsageCredential } from "./secrets.js";
 import type { ManagedProfile, ProfileUsageResult } from "../shared/types.js";
-
-const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 
 export async function queryProfileUsage(profileId: string): Promise<ProfileUsageResult> {
   const profile = await findProfile(profileId);
@@ -38,23 +41,65 @@ export async function queryProfileUsage(profileId: string): Promise<ProfileUsage
 }
 
 async function queryCodexAccount(profile: ManagedProfile): Promise<ProfileUsageResult> {
-  const authPath = path.join(profile.paths.codexHome, "auth.json");
-  let auth: any;
-  try { auth = JSON.parse(await fs.readFile(authPath, "utf8")); }
-  catch { throw new Error("No readable Codex account login was found for this profile. Sign in to the profile first."); }
-  const accessToken = auth.tokens?.access_token;
-  const accountId = auth.tokens?.account_id;
-  if (!accessToken || !accountId) throw new Error("This profile does not contain a ChatGPT account token. Sign in to the profile first.");
-  const response = await fetch(CODEX_USAGE_URL, { headers: { Authorization: `Bearer ${accessToken}`, "ChatGPT-Account-Id": accountId, Accept: "application/json", originator: "Codex Desktop" }, signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? "Codex account session expired. Sign in again in this profile." : `Codex usage endpoint returned HTTP ${response.status}.`);
-  const data = await response.json() as any;
-  const rate = data.rate_limit ?? data;
-  const windows = [
-    { name: "Primary", value: rate.primary_window ?? rate.primary },
-    { name: "Secondary", value: rate.secondary_window ?? rate.secondary }
-  ].flatMap(({ name, value }) => typeof value?.used_percent === "number" ? [{ name, usedPercent: value.used_percent, resetsAt: typeof value.reset_at === "number" ? new Date(value.reset_at * 1000).toISOString() : undefined }] : []);
+  let profileEnv: NodeJS.ProcessEnv = {};
+  try { profileEnv = parseEnv(await fs.readFile(path.join(profile.paths.codexHome, ".env"), "utf8")); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new Error("Could not read this profile's .env file."); }
+  const home = path.dirname(profile.paths.codexHome);
+  let target;
+  try { target = await resolveCliTarget({ ...process.env, ...profileEnv }, { home, fallbackPath: defaultExecutablePathEnv(), cliExecutablePath: null }); }
+  catch { throw new Error("Could not find the Codex CLI for this profile. Install it or set CODEX_PROFILE_CLI_PATH in the profile's .env file."); }
+  const env: NodeJS.ProcessEnv = { ...process.env, CODEX_HOME: profile.paths.codexHome };
+  for (const key of ["CODEX_ACCESS_TOKEN", "CODEX_HOME", "OPENAI_API_KEY", "CODEX_API_KEY", "ELECTRON_RUN_AS_NODE", "NODE_OPTIONS"]) delete env[key];
+  Object.assign(env, profileEnv);
+  env.CODEX_HOME = profile.paths.codexHome;
+  for (const key of ["OPENAI_API_KEY", "CODEX_API_KEY", "ELECTRON_RUN_AS_NODE", "NODE_OPTIONS"]) delete env[key];
+  if (target.extraPath?.length) env.PATH = [...target.extraPath, env.PATH ?? ""].join(path.delimiter);
+  if (target.managedByNpm) env.CODEX_MANAGED_BY_NPM = "1";
+  if (target.args.length && target.file === process.execPath && process.versions.electron) env.ELECTRON_RUN_AS_NODE = "1";
+  const data = await readAppServerUsage(target.file, [...target.args, "app-server"], env);
+  const rate = data.rateLimits ?? data;
+  const limits = Object.values(rate.rateLimitsByLimitId ?? {}) as any[];
+  const rows = limits.length ? limits : [rate];
+  const windows = rows.flatMap((limit: any) => [
+    { name: limit.limitName || limit.limitId || "Primary", value: limit.primary },
+    { name: `${limit.limitName || limit.limitId || ""} · Secondary`, value: limit.secondary }
+  ].flatMap(({ name, value }) => typeof value?.usedPercent === "number" ? [{ name: name.trim().replace(/^· /, ""), usedPercent: value.usedPercent, resetsAt: typeof value.resetsAt === "number" ? new Date(value.resetsAt * 1000).toISOString() : undefined }] : []));
   if (!windows.length) throw new Error("Codex returned usage data in an unrecognized format.");
-  return { profileId: profile.id, mode: "codex_account", queriedAt: new Date().toISOString(), planName: typeof data.plan_type === "string" ? data.plan_type : undefined, windows };
+  return { profileId: profile.id, mode: "codex_account", queriedAt: new Date().toISOString(), planName: typeof data.planType === "string" ? data.planType : undefined, windows };
+}
+
+function readAppServerUsage(file: string, args: string[], env: NodeJS.ProcessEnv): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, { env, stdio: "pipe", windowsHide: true, shell: false });
+    const lines = createInterface({ input: child.stdout });
+    const timer = setTimeout(() => { child.kill(); finish(new Error("Codex usage query timed out. Try again.")); }, 20000);
+    let settled = false;
+    let initializeSent = false;
+    const finish = (error?: Error, value?: any) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer); lines.close();
+      child.kill();
+      if (error) reject(error); else resolve(value);
+    };
+    child.once("error", () => finish(new Error("Could not start Codex app-server for this profile.")));
+    lines.on("line", (line) => {
+      let message: any;
+      try { message = JSON.parse(line); } catch { return; }
+      if (message.id === 1) {
+        if (message.error) return finish(new Error("Codex app-server could not initialize this profile's account. Sign in to the profile first."));
+        if (!initializeSent) {
+          initializeSent = true;
+          child.stdin.write(`${JSON.stringify({ method: "initialized" })}\n`);
+          child.stdin.write(`${JSON.stringify({ method: "account/rateLimits/read", id: 2, params: {} })}\n`);
+        }
+      } else if (message.id === 2) {
+        if (message.error) return finish(new Error("Codex could not read subscription usage. Sign in again in this profile, then retry."));
+        finish(undefined, message.result);
+      }
+    });
+    child.once("exit", (code) => { if (!settled) finish(new Error(code === 0 ? "Codex app-server closed before returning usage data." : "Codex app-server failed. Sign in to this profile and try again.")); });
+    child.stdin.write(`${JSON.stringify({ method: "initialize", id: 1, params: { clientInfo: { name: "codex-profile-manager", title: "Codex Profile Manager", version: "0.1.9" }, capabilities: { experimentalApi: true } } })}\n`);
+  });
 }
 
 function numberAt(value: unknown, pointer?: string): number | undefined {

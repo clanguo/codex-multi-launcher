@@ -83,6 +83,7 @@ export async function createProfileRecord(input: CreateProfileInput): Promise<Ma
     auth: {
       mode: input.authMode ?? "api_key"
     },
+    usageQuery: { enabled: input.authMode === "chatgpt_account", mode: input.authMode === "chatgpt_account" ? "codex_account" : "provider_balance" },
     appearance: {
       iconBackgroundColor: normalizeHexColor(input.appearance?.iconBackgroundColor)
     },
