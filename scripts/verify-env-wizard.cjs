@@ -57,6 +57,11 @@ async function run() {
   const officialApi = process.argv.includes("--official-api");
   const runtimeMode = process.argv.includes("--runtime");
   let runtimeRows = [], launches = 0, environmentReads = 0, cliRegistrations = 0;
+  let originalLaunches = 0, finishOriginalLaunch;
+  ipcMain.handle("app:open-original-codex", () => {
+    originalLaunches++;
+    return new Promise((resolve, reject) => { finishOriginalLaunch = (error) => error ? reject(new Error(error)) : resolve({ ok: true }); });
+  });
   const nativeActions = [];
   const testRoot = process.env.CODEX_ENV_WIZARD_TEST_ROOT;
   if (!testRoot) throw new Error("Run this verification script with Node.");
@@ -138,6 +143,24 @@ async function run() {
     await evaluate('localStorage.setItem("codex-profile-manager-language", "en")');
     await win.loadFile(path.resolve(__dirname, "../dist/index.html"));
     await waitFor('document.querySelector(".sidebar-add-button")');
+    assert.equal(await evaluate('document.querySelector(".profile-list > :first-child").textContent.includes("Original Codex")'), true, "original launcher must exist before any profile is created");
+    await evaluate('document.querySelector(".original-codex-row").click()');
+    await waitFor('document.querySelector(".original-launcher-panel")');
+    assert.equal(await evaluate('document.querySelector(".original-launcher-panel .danger")'), null, "original launcher cannot be deleted");
+    await evaluate('document.querySelector(".original-launcher-panel .primary").click()');
+    await waitFor('document.querySelector(".original-launcher-panel .primary").disabled');
+    await evaluate('document.querySelector(".original-launcher-panel .primary").click()');
+    assert.equal(originalLaunches, 1, "repeated clicks while opening must be ignored");
+    finishOriginalLaunch();
+    await waitFor('!document.querySelector(".original-launcher-panel .primary").disabled && document.querySelector(".toast")?.textContent.includes("Requested to open")');
+    await evaluate('document.querySelector(".original-launcher-panel .primary").click()');
+    await waitFor('document.querySelector(".original-launcher-panel .primary").disabled');
+    finishOriginalLaunch("Original app is missing");
+    await waitFor('!document.querySelector(".original-launcher-panel .primary").disabled && document.querySelector(".toast")?.textContent.includes("Original app is missing")');
+    assert.equal((await service.listProfiles()).length, 0, "original launch must not create a managed profile");
+    const originalScreenshot = process.argv.find(arg => arg.startsWith("--original-screenshot="))?.slice("--original-screenshot=".length);
+    if (originalScreenshot) await fs.writeFile(path.resolve(originalScreenshot), (await win.webContents.capturePage()).toPNG());
+    console.log("Original launcher UI verification passed (default entry, launch IPC, repeated clicks, errors, no managed profile).");
     await evaluate('document.querySelector(".sidebar-add-button").click()');
     await nextStep("Provider");
     if (officialApi) {

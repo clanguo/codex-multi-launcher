@@ -431,6 +431,7 @@ export interface CodexApi {
   installUpdate(): Promise<{ ok: true }>;
   onUpdateEvent(listener: (event: UpdateDownloadEvent) => void): () => void;
   openExternalUrl(url: string): Promise<{ ok: true }>;
+  openOriginalCodex(): Promise<{ ok: true }>;
   getEnvironmentReport(): Promise<EnvironmentReport>;
   getDefaultProfileEnvFile(): Promise<DefaultProfileEnvFile>;
   getDiagnosticsReport(): Promise<DiagnosticsReport>;

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { getEnvironmentReport } from "./environment.js";
 import { getDiagnosticsReport } from "./diagnostics.js";
 import { getDefaultProfileEnvFile } from "./profile-env.js";
+import { openOriginalCodex } from "./original-launcher.js";
 import { getProfileRuntime } from "./runtime-monitor.js";
 import { buildApplicationMenuTemplate, type ApplicationMenuLabels } from "./application-menu.js";
 import { APP_NAME, configurePathProvider } from "./paths.js";
@@ -295,6 +296,7 @@ function registerIpc(): void {
     return { ok: true };
   });
   ipcMain.handle("environment:get", () => getEnvironmentReport());
+  ipcMain.handle("app:open-original-codex", () => openOriginalCodex());
   ipcMain.handle("profiles:default-env", () => getDefaultProfileEnvFile());
   ipcMain.handle("diagnostics:get", () => getDiagnosticsReport());
   ipcMain.handle("dialog:pick-codex-app-path", async () => {

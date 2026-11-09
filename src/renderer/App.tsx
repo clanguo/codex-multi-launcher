@@ -55,7 +55,7 @@ import { RU_TEXT } from "./locales/ru";
 
 type WizardStep = "profile" | "provider" | "env" | "test" | "launcher" | "generate";
 type Language = "zh" | "en" | "ru";
-type ActiveView = "dashboard" | "profile" | "settings";
+type ActiveView = "dashboard" | "original" | "profile" | "settings";
 type SettingsTab = "general" | "about";
 
 const WIZARD_STEPS: WizardStep[] = ["profile", "provider", "env", "test", "launcher", "generate"];
@@ -70,6 +70,11 @@ const TEXT: Record<Language, Record<string, string>> = {
     appSubtitle: "本地多开配置管理",
     home: "首页",
     profilesSection: "配置列表",
+    originalCodex: "原始 Codex",
+    originalCodexMeta: "默认启动器",
+    originalCodexDescription: "打开已安装的 Codex / ChatGPT，沿用原有账号、设置和历史记录。",
+    originalCodexOpened: "已请求打开原始 Codex。",
+    originalCodexFailed: "原始 Codex 启动失败。",
     pageTitle: "配置管理",
     pageSubtitle: "创建隔离的 Codex 桌面窗口，并为每个窗口使用独立设置。",
     dashboardTitle: "工作台",
@@ -83,7 +88,7 @@ const TEXT: Record<Language, Record<string, string>> = {
     noRunningProfiles: "暂无运行中的窗口。",
     createProfile: "创建配置",
     showRemoved: "显示已移除",
-    noProfiles: "暂无配置",
+    noProfiles: "暂无自定义配置",
     refresh: "刷新",
     refreshing: "刷新中",
     copyDiagnostics: "复制诊断",
@@ -339,6 +344,11 @@ const TEXT: Record<Language, Record<string, string>> = {
     appSubtitle: "Local multi-instance manager",
     home: "Home",
     profilesSection: "Profiles",
+    originalCodex: "Original Codex",
+    originalCodexMeta: "Default launcher",
+    originalCodexDescription: "Open the installed Codex / ChatGPT with your existing account, settings, and history.",
+    originalCodexOpened: "Requested to open the original Codex app.",
+    originalCodexFailed: "Failed to open the original Codex app.",
     pageTitle: "Profile Manager",
     pageSubtitle: "Create isolated Codex desktop windows with separate provider configuration.",
     dashboardTitle: "Dashboard",
@@ -352,7 +362,7 @@ const TEXT: Record<Language, Record<string, string>> = {
     noRunningProfiles: "No profiles are currently running.",
     createProfile: "Create Profile",
     showRemoved: "Show removed",
-    noProfiles: "No profiles yet.",
+    noProfiles: "No custom profiles yet.",
     refresh: "Refresh",
     refreshing: "Refreshing...",
     copyDiagnostics: "Copy Diagnostics",
@@ -644,6 +654,7 @@ export function App() {
   const [runtimeStatuses, setRuntimeStatuses] = useState<ProfileRuntimeInfo[]>([]);
   const runtimeRevision = useRef(-1);
   const [busyProfileIds, setBusyProfileIds] = useState<Set<string>>(() => new Set());
+  const [isOpeningOriginalCodex, setIsOpeningOriginalCodex] = useState(false);
   const [showDeletedProfiles, setShowDeletedProfiles] = useState(false);
   const [configBackups, setConfigBackups] = useState<ConfigBackupInfo[]>([]);
   const [cliInfo, setCliInfo] = useState<ProfileCliInfo | null>(null);
@@ -1160,6 +1171,19 @@ export function App() {
     }
   }
 
+  async function openOriginalCodex() {
+    if (isOpeningOriginalCodex) return;
+    setIsOpeningOriginalCodex(true);
+    try {
+      await window.codexProfileManager.openOriginalCodex();
+      showToast(t.originalCodexOpened);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : t.originalCodexFailed);
+    } finally {
+      setIsOpeningOriginalCodex(false);
+    }
+  }
+
   async function openSelectedProfile() {
     if (!selectedProfile) return;
     const profile = selectedProfile;
@@ -1433,6 +1457,13 @@ export function App() {
         </label>
 
         <div className="profile-list">
+          <button className={`profile-row original-codex-row ${activeView === "original" ? "selected" : ""}`} onClick={() => setActiveView("original")} type="button">
+            <span className="profile-row-heading">
+              <Rocket size={15} />
+              <span className="profile-name">{t.originalCodex}</span>
+            </span>
+            <span className="profile-meta">{t.originalCodexMeta}</span>
+          </button>
           {profiles.length === 0 ? (
             <p className="empty-text">{t.noProfiles}</p>
           ) : (
@@ -1463,8 +1494,8 @@ export function App() {
         {activeView !== "settings" ? (
           <header className="toolbar">
             <div>
-              <h2>{activeView === "dashboard" ? t.dashboardTitle : selectedProfile?.name ?? t.profileDetailTitle}</h2>
-              <p>{activeView === "dashboard" ? t.dashboardSubtitle : selectedProfile ? t.profileDetailSubtitle : t.pickProfile}</p>
+              <h2>{activeView === "dashboard" ? t.dashboardTitle : activeView === "original" ? t.originalCodex : selectedProfile?.name ?? t.profileDetailTitle}</h2>
+              <p>{activeView === "dashboard" ? t.dashboardSubtitle : activeView === "original" ? t.originalCodexMeta : selectedProfile ? t.profileDetailSubtitle : t.pickProfile}</p>
             </div>
             {activeView === "dashboard" ? (
               <>
@@ -1496,6 +1527,22 @@ export function App() {
             onSetSettingsTab={setSettingsTab}
             onSimulateUpdate={simulateUpdateAvailable}
           />
+        ) : activeView === "original" ? (
+          <section className="panel original-launcher-panel">
+            <div className="panel-heading">
+              <div>
+                <h3>{t.originalCodex}</h3>
+                <p>{t.originalCodexDescription}</p>
+              </div>
+              <button className="button primary" disabled={isOpeningOriginalCodex} onClick={() => void openOriginalCodex()} type="button">
+                <Play size={15} />
+                {isOpeningOriginalCodex ? t.runtimeStarting : t.startProfile}
+              </button>
+            </div>
+            {environment?.codexAppPath ? (
+              <PathRow icon={<Folder size={15} />} label={t.checkCodexApp} onReveal={() => void revealPath(environment.codexAppPath)} value={environment.codexAppPath} />
+            ) : null}
+          </section>
         ) : activeView === "dashboard" ? (
           <>
             {announcement ? (

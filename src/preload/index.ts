@@ -16,6 +16,7 @@ const api: CodexApi = {
     return () => ipcRenderer.removeListener("app:update-event", wrappedListener);
   },
   openExternalUrl: (url: string) => ipcRenderer.invoke("shell:open-external", url),
+  openOriginalCodex: () => ipcRenderer.invoke("app:open-original-codex"),
   getEnvironmentReport: () => ipcRenderer.invoke("environment:get"),
   getDefaultProfileEnvFile: () => ipcRenderer.invoke("profiles:default-env"),
   getDiagnosticsReport: () => ipcRenderer.invoke("diagnostics:get"),
